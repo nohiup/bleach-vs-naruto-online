@@ -1,0 +1,20 @@
+services:
+  - type: web
+    name: bvn-relay
+    runtime: node
+    rootDir: tools/relay
+    buildCommand: npm ci --omit=dev
+    startCommand: node src/server.js
+    plan: free
+    numInstances: 1
+    healthCheckPath: /health
+    autoDeploy: true
+    envVars:
+      - key: NODE_VERSION
+        value: "20"
+      - key: TRUST_PROXY
+        value: "1"
+      - key: ALLOWED_ORIGIN
+        sync: false
+      - key: ROOM_PASSWORD
+        sync: false
