@@ -13,6 +13,8 @@
         RATE_LIMIT: "Too many attempts, please wait a moment.",
         ALREADY_JOINED: "You already joined this room."
     };
+    var HP_OPTS = ["0.5", "1", "2", "3", "5"];
+    var TIME_OPTS = ["30", "60", "90", "-1"];
     var $ = function (id) { return document.getElementById(id); };
     var screens = ["lobby", "game", "ended"];
     var ws = null;
@@ -155,6 +157,7 @@
         $("invite").value = location.href;
         hideStall();
         hideDesync();
+        hideMatch();
         $("overlay").classList.toggle("hidden", seat.role !== "host");
         showScreen("game");
         updateOpponent();
@@ -162,7 +165,11 @@
         loadRuffle().then(function () {
             if (seat !== mine) return;
             var params = { web: "1", role: mine.role, token: mine.token, nick: mine.nick, relayHost: "bvn-game", relayPort: "17511" };
-            if (mine.role === "host") params.inputDelay = String(getDelay());
+            if (mine.role === "host") {
+                params.inputDelay = String(getDelay());
+                params.hp = getHp();
+                params.time = getTime();
+            }
             var ruffle = window.RufflePlayer.newest();
             player = ruffle.createPlayer();
             $("player").appendChild(player);
@@ -183,6 +190,21 @@
         var v = parseInt($("delay").value, 10);
         return v >= 1 && v <= 6 ? v : 3;
     }
+    function getHp() {
+        var v = $("hp").value;
+        return HP_OPTS.indexOf(v) >= 0 ? v : "1";
+    }
+    function getTime() {
+        var v = $("time").value;
+        return TIME_OPTS.indexOf(v) >= 0 ? v : "60";
+    }
+    function hideMatch() { $("match").textContent = ""; $("match").classList.add("hidden"); }
+    function showMatch(d) {
+        var hp = Number(d.hp), t = Number(d.time);
+        if (!isFinite(hp) || !isFinite(t)) return;
+        $("match").textContent = "Life " + Math.round(hp * 100) + "% · Time " + (t < 0 ? "∞" : t + "s");
+        $("match").classList.remove("hidden");
+    }
     function focusPlayer() {
         if (!player) return;
         try { player.tabIndex = 0; player.focus(); } catch (e) { }
@@ -200,6 +222,7 @@
         destroyPlayer();
         hideStall();
         hideDesync();
+        hideMatch();
         $("ended-msg").textContent = text;
         showScreen("ended");
     }
@@ -209,6 +232,7 @@
         destroyPlayer();
         hideStall();
         hideDesync();
+        hideMatch();
         setMsg(typeof text === "string" ? text : "");
         showScreen("lobby");
         renderRoom();
@@ -236,6 +260,9 @@
                 break;
             case "matchStart":
                 focusPlayer();
+                break;
+            case "matchSettings":
+                showMatch(data);
                 break;
             case "ping":
                 if (typeof data.rtt === "number") $("ping").textContent = Math.round(data.rtt) + " ms";
@@ -276,6 +303,10 @@
     $("nick").value = storeGet("bvn.nick") || "";
     $("delay").value = String(Math.min(6, Math.max(1, parseInt(storeGet("bvn.delay"), 10) || 3)));
     $("delay").addEventListener("change", function () { storeSet("bvn.delay", String(getDelay())); });
+    $("hp").value = HP_OPTS.indexOf(storeGet("bvn.hp")) >= 0 ? storeGet("bvn.hp") : "1";
+    $("time").value = TIME_OPTS.indexOf(storeGet("bvn.time")) >= 0 ? storeGet("bvn.time") : "60";
+    $("hp").addEventListener("change", function () { storeSet("bvn.hp", getHp()); });
+    $("time").addEventListener("change", function () { storeSet("bvn.time", getTime()); });
     renderRoom();
     connect();
 })();
