@@ -34,8 +34,10 @@ import net.play5d.game.bvn.ctrler.lan.LockFrameLogic;
 import net.play5d.game.bvn.ctrler.lan.LockFrameServerLogic;
 import net.play5d.game.bvn.ctrler.lan.SelectFighterClientLogic;
 import net.play5d.game.bvn.ctrler.lan.SelectFighterServerLogic;
+import net.play5d.game.bvn.data.GameData;
 import net.play5d.game.bvn.data.GameMode;
 import net.play5d.game.bvn.data.TeamID;
+import net.play5d.game.bvn.data.vos.ConfigVO;
 import net.play5d.game.bvn.data.lan.LanNetConfig;
 import net.play5d.game.bvn.events.GameEvent;
 import net.play5d.game.bvn.interfaces.GameInterface;
@@ -74,6 +76,8 @@ import net.play5d.game.bvn.web.views.WebWaitState;
 public class WebSessionCtrl {
     /** @private 会话内就绪握手消息类型 */
     private static const MSG_READY:String = 'WEB_READY';
+    /** @private 房主下发对局设置（生命 / 时间）的会话消息类型 */
+    private static const MSG_SETTINGS:String = 'WEB_SETTINGS';
     /** @private stall 事件最小上报间隔（毫秒） */
     private static const STALL_EMIT_MS:int = 250;
 
@@ -113,6 +117,18 @@ public class WebSessionCtrl {
     private var _matchStarted:Boolean;
     /** @private */
     private var _matchEnded:Boolean;
+    /** @private 客户端是否已收到房主的对局设置（房主恒为 <code>true</code>） */
+    private var _settingsReceived:Boolean;
+    /** @private 本场对局生命比例 */
+    private var _matchHp:Number = WebParams.HP_DEFAULT;
+    /** @private 本场对局回合时间 */
+    private var _matchTime:int = WebParams.TIME_DEFAULT;
+    /** @private 是否已覆盖玩家本地的生命 / 时间设置 */
+    private var _settingsApplied:Boolean;
+    /** @private 玩家原有的生命比例 */
+    private var _origHp:Number;
+    /** @private 玩家原有的回合时间 */
+    private var _origTime:int;
     /** @private */
     private var _left:Boolean;
     /** @private */
@@ -155,6 +171,15 @@ public class WebSessionCtrl {
     }
 
     /**
+     * 联机对局是否已覆盖玩家本地的生命 / 时间设置（此期间不应写存档）。
+     * @return 已覆盖且未还原为 <code>true</code>。
+     * @default false
+     */
+    public function get settingsOverridden():Boolean {
+        return _settingsApplied;
+    }
+
+    /**
      * 按 FlashVars 连接中继并注册页面退出回调；应在游戏资源开始加载前调用，以免握手超时。
      * @example
      * <listing version="3.0">
@@ -165,6 +190,12 @@ public class WebSessionCtrl {
     public function connect():void {
         var p:WebParams = WebParams.I;
         _isHost         = p.role == WebParams.ROLE_HOST;
+
+        if (_isHost) {
+            _matchHp          = p.hp;
+            _matchTime        = p.time;
+            _settingsReceived = true;
+        }
 
         _link             = new WebLanLink();
         _link.onHelloOk   = onHelloOk;
@@ -265,6 +296,17 @@ public class WebSessionCtrl {
             return;
         }
 
+        if (data && data.type == MSG_SETTINGS) {
+            if (!_isHost && !_settingsReceived) {
+                _matchHp          = WebParams.normalizeHp(data.hp);
+                _matchTime        = WebParams.normalizeTime(data.time);
+                _settingsReceived = true;
+                tryStart();
+            }
+
+            return;
+        }
+
         if (!_matchStarted) {
             return;
         }
@@ -315,13 +357,18 @@ public class WebSessionCtrl {
         }
 
         _localReady = true;
+
+        if (_isHost) {
+            sendSession({type: MSG_SETTINGS, hp: _matchHp, time: _matchTime});
+        }
+
         sendSession({type: MSG_READY});
         tryStart();
     }
 
     /** @private 双方都就绪才开始 */
     private function tryStart():void {
-        if (_localReady && _remoteReady && !_matchStarted && !_left) {
+        if (_localReady && _remoteReady && _settingsReceived && !_matchStarted && !_left) {
             startMatch();
         }
     }
@@ -350,7 +397,37 @@ public class WebSessionCtrl {
             GameMode.currentMode = GameMode.SINGLE_VS_PEOPLE;
         }
 
+        applySettings();
+
         MainGame.I.goSelect();
+    }
+
+    /** @private 保存玩家原设置并套用本场生命 / 时间，随后上报 <code>matchSettings</code> */
+    private function applySettings():void {
+        var cfg:ConfigVO = GameData.I.config;
+
+        if (!_settingsApplied) {
+            _origHp          = cfg.fighterHP;
+            _origTime        = cfg.fightTime;
+            _settingsApplied = true;
+        }
+
+        cfg.fighterHP = _matchHp;
+        cfg.fightTime = _matchTime;
+
+        WebBridge.emit('matchSettings', {hp: _matchHp, time: _matchTime});
+    }
+
+    /** @private 还原玩家原有的生命 / 时间设置 */
+    private function restoreSettings():void {
+        if (!_settingsApplied) {
+            return;
+        }
+
+        _settingsApplied = false;
+
+        GameData.I.config.fighterHP = _origHp;
+        GameData.I.config.fightTime = _origTime;
     }
 
     /** @private 房主：对齐 LANServerCtrl.gameStart */
@@ -580,6 +657,8 @@ public class WebSessionCtrl {
 
         _roundStarted = false;
         _stallEmitted = false;
+
+        restoreSettings();
 
         if (!_matchStarted) {
             return;

@@ -104,6 +104,11 @@ public class GameInterfaceManager implements IGameInterface {
      * @inheritDoc
      */
     public function saveGame(data:Object):void {
+        // 联机期间生命 / 时间为房主覆盖值，不写入玩家存档
+        if (WebSessionCtrl.I.settingsOverridden) {
+            return;
+        }
+
         var so:Object = {};
         so[SAVE_KEY]  = JSON.stringify(data);
 

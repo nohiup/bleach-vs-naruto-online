@@ -58,7 +58,9 @@ across messages (treat it as a byte stream — Ruffle delivers a TCP-like stream
 ## SWF <-> page
 
 FlashVars passed by the page: `web=1`, `role`, `token`, `nick`, `relayHost=bvn-game`, `relayPort=17511`.
-Optional: `mode` (`team` | `single`, default `single`), `inputDelay` (int 1-6, default 3; clamped; only the host's value is used, it is synced to the client at game start).
+Optional: `mode` (`team` | `single`, default `single`), `inputDelay` (int 1-6, default 3; clamped; only the host's value is used, it is synced to the client at game start), `hp` (number, one of `0.5`, `1`, `2`, `3`, `5`, default `1`) and `time` (int seconds, one of `30`, `60`, `90`, `-1` = unlimited, default `60`); invalid values fall back to the default; only the host's `hp`/`time` are used.
+
+Session message (SESSION frame, JSON) host -> client, sent before the host's `WEB_READY`: `{"type":"WEB_SETTINGS","hp":<num>,"time":<int>}`. The client validates against the same sets (invalid -> default), applies them to its game config, and does not start the match until it has received it. Both sides apply `hp`/`time` before entering character select and restore the player's own offline values when the session ends; nothing is saved to local storage while overridden.
 
 SWF calls `window.bvnOnEvent(name, json)` via `ExternalInterface` (`json` is a JSON string):
 
@@ -66,6 +68,7 @@ SWF calls `window.bvnOnEvent(name, json)` via `ExternalInterface` (`json` is a J
 |------|---------|---------|
 | `connected` | `{"role":"host"\|"client","nick":"..."}` | relay HELLO accepted |
 | `peerReady` | `{}` | both seats claimed |
+| `matchSettings` | `{"hp":num,"time":int}` | effective life ratio and round time applied for this match (both peers, emitted right before character select, before `matchStart`) |
 | `matchStart` | `{"role":"host"\|"client"}` | a match began |
 | `matchEnd` | `{"winner":"host"\|"client"}` or `{}` | match finished normally (winner omitted if unknown); not a disconnect, the session is then closed silently |
 | `stall` | `{"ms":int}` | waiting for the peer's input for `ms` ms (emitted after 500 ms, at most every 250 ms, only once a round has started) |
