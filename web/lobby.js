@@ -49,11 +49,11 @@
             st.textContent = "Waiting for opponent (1/2)";
             pl.textContent = "Host: " + (room.players[0] || "?");
             btn.textContent = "Join";
-            btn.disabled = joining;
+            btn.disabled = joining || !!seat;
         } else {
             st.textContent = "Empty (0/2)";
             btn.textContent = "Join";
-            btn.disabled = joining;
+            btn.disabled = joining || !!seat;
         }
     }
     function connect() {
@@ -109,6 +109,7 @@
         $("opp").textContent = room.players[i] || "...";
     }
     function onJoin() {
+        if (seat || joining) return;
         var nick = $("nick").value.trim();
         if (!NICK_RE.test(nick)) { setMsg(ERRORS.BAD_NICK); return; }
         storeSet("bvn.nick", nick);
@@ -180,11 +181,11 @@
         $("ended-msg").textContent = text;
         showScreen("ended");
     }
-    function leave() {
+    function leave(text) {
         send({ t: "leave" });
         seat = null;
         destroyPlayer();
-        setMsg("");
+        setMsg(typeof text === "string" ? text : "");
         showScreen("lobby");
         renderRoom();
     }
@@ -215,6 +216,9 @@
             case "ping":
                 if (typeof data.rtt === "number") $("ping").textContent = Math.round(data.rtt) + " ms";
                 break;
+            case "matchEnd":
+                leave("Match finished");
+                break;
             case "disconnected":
                 endGame("Connection lost");
                 break;
@@ -224,8 +228,8 @@
         }
     };
     $("btn-join").addEventListener("click", onJoin);
-    $("btn-leave-game").addEventListener("click", leave);
-    $("btn-leave-wait").addEventListener("click", leave);
+    $("btn-leave-game").addEventListener("click", function () { leave(); });
+    $("btn-leave-wait").addEventListener("click", function () { leave(); });
     $("btn-back").addEventListener("click", function () { showScreen("lobby"); renderRoom(); });
     $("btn-copy").addEventListener("click", copyInvite);
     $("nick").addEventListener("keydown", function (e) { if (e.key === "Enter") onJoin(); });

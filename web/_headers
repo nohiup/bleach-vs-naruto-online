@@ -1,0 +1,21 @@
+/*
+  X-Content-Type-Options: nosniff
+/
+  Cache-Control: no-cache
+/index.html
+  Cache-Control: no-cache
+/config.js
+  Cache-Control: no-cache
+/config.prod.js
+  Cache-Control: no-cache
+/lobby.js
+  Cache-Control: no-cache
+/style.css
+  Cache-Control: no-cache
+/*.wasm
+  Content-Type: application/wasm
+/*.swf
+  Content-Type: application/x-shockwave-flash
+  Cache-Control: public, max-age=300, must-revalidate
+/ruffle-0.7.1/*
+  Cache-Control: public, max-age=31536000, immutable
