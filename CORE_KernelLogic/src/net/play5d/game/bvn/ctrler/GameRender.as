@@ -261,17 +261,3 @@ public class GameRender {
 
 }
 }
-
-/** 主渲染归属条目。 @private */
-class RenderEntry {
-
-    /** @private 归属对象 */
-    public var owner:*;
-    /** @private 该归属下按注册顺序排列的渲染函数 */
-    public var funcs:Vector.<Function> = new Vector.<Function>();
-
-    public function RenderEntry(owner:*) {
-        this.owner = owner;
-    }
-
-}
