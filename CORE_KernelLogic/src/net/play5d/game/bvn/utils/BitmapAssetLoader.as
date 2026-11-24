@@ -25,10 +25,14 @@ import net.play5d.game.bvn.ctrler.AssetManager;
 
 public class BitmapAssetLoader {
 
-    private var _queueLength:int;
-    private var _urls:Array;
+    /**
+     * 同时在途的最大加载数。
+     *
+     * @default 12
+     */
+    public static var MAX_CONCURRENT:int = 12;
+
     private var _cacheObj:Object = {};
-    private var _successBack:Function;
     private var _progressBack:Function;
 
     public function getBitmap(id:String):Bitmap {
@@ -47,13 +51,111 @@ public class BitmapAssetLoader {
         return new Bitmap(bd);
     }
 
+    /**
+     * 批量加载位图并缓存；以有界并发加载，全部结束（成功或失败）后调用一次 <code>success</code>。
+     *
+     * <p>同时最多 <code>MAX_CONCURRENT</code> 个请求在途，用于隐藏网络往返延迟；
+     * 每个 URL 独立缓存，结果与完成顺序无关。</p>
+     *
+     * @param urls 位图 URL 数组。
+     * @param success 全部结束回调，签名为 <code>function():void</code>；可为 <code>null</code>。
+     * @param progress 总进度回调，签名为 <code>function(p:Number):void</code>（<code>p</code> 为 0–1）；可为 <code>null</code>。
+     * @example
+     * <listing version="3.0">
+     * loader.loadQueue(['a.png', 'b.png'], onDone, onProgress);
+     * </listing>
+     */
     public function loadQueue(urls:Array, success:Function, progress:Function = null):void {
-        _successBack  = success;
+        // 每次队列使用独立状态，避免重入时互相覆盖
+        var pending:Array    = urls.concat();
+        var total:int        = pending.length;
+        var done:int         = 0;
+        var running:int      = 0;
+        var finished:Boolean = false;
+        var partial:Object   = {};
+        var seq:int          = 0;
+        var pumping:Boolean  = false;
+        var again:Boolean    = false;
+
         _progressBack = progress;
 
-        _urls        = urls.concat();
-        _queueLength = urls.length;
-        loadNext();
+        if (total < 1) {
+            finish();
+            return;
+        }
+
+        pump();
+
+        function pump():void {
+            // 回调可能同步触发，用标记避免递归展开
+            if (pumping) {
+                again = true;
+                return;
+            }
+            pumping = true;
+            do {
+                again = false;
+                while (!finished && running < MAX_CONCURRENT && pending.length > 0) {
+                    startOne(pending.shift());
+                }
+            }
+            while (again);
+            pumping = false;
+            if (!finished && done >= total) {
+                finish();
+            }
+        }
+
+        function startOne(url:String):void {
+            var id:int       = seq++;
+            var over:Boolean = false;
+
+            running++;
+            load(url, onOver, onItemProgress);
+
+            function onItemProgress(v:Number):void {
+                if (over) {
+                    return;
+                }
+                partial[id] = v > 1 ? 1 : v;
+                report();
+            }
+
+            function onOver():void {
+                if (over) {
+                    return;
+                }
+                over = true;
+                delete partial[id];
+                running--;
+                done++;
+                report();
+                pump();
+            }
+        }
+
+        function report():void {
+            if (finished || _progressBack == null) {
+                return;
+            }
+            var cur:Number = done;
+            for each(var v:Number in partial) {
+                cur += v;
+            }
+            var p:Number = cur / total;
+            _progressBack(p > 1 ? 1 : p);
+        }
+
+        function finish():void {
+            if (finished) {
+                return;
+            }
+            finished      = true;
+            _progressBack = null;
+            if (success != null) {
+                success();
+            }
+        }
     }
 
     private function load(url:String, back:Function = null, progress:Function = null):void {
@@ -103,29 +205,6 @@ public class BitmapAssetLoader {
         }
 
         AssetManager.I.disposeAsset(id);
-
-    }
-
-    private function loadNext():void {
-        if (_urls.length < 1) {
-            _progressBack = null;
-            if (_successBack != null) {
-                _successBack();
-                _successBack = null;
-            }
-
-            return;
-        }
-        var url:String = _urls.shift();
-        load(url, loadNext, loadProgress);
-
-        function loadProgress(v:Number):void {
-            if (_progressBack != null) {
-                var cur:Number = _queueLength - _urls.length - 1 + v;
-                var p:Number   = cur / _queueLength;
-                _progressBack(p);
-            }
-        }
 
     }
 
