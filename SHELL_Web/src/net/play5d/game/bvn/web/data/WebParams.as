@@ -23,7 +23,9 @@ package net.play5d.game.bvn.web.data {
  *
  * <p>参数名：<code>web</code>、<code>role</code>、<code>token</code>、<code>nick</code>、
  * <code>relayHost</code>、<code>relayPort</code>；另有可选 <code>mode</code>（<code>team</code> 为小队对战，
- * 其余为单人对战）与 <code>inputDelay</code>（输入延迟帧数，1–6，默认 3，仅房主生效）。未带 <code>web=1</code> 时 <code>web</code> 为 <code>false</code>，壳按离线模式运行。</p>
+ * 其余为单人对战）、<code>inputDelay</code>（输入延迟帧数，1–6，默认 3，仅房主生效）、
+ * <code>hp</code>（生命比例，0.5 / 1 / 2 / 3 / 5，默认 1，仅房主生效）与 <code>time</code>
+ * （回合时间，30 / 60 / 90 / -1 无限，默认 60，仅房主生效）。未带 <code>web=1</code> 时 <code>web</code> 为 <code>false</code>，壳按离线模式运行。</p>
  *
  * @example
  * <listing version="3.0">
@@ -42,6 +44,27 @@ public class WebParams {
      * @default client
      */
     public static const ROLE_CLIENT:String = 'client';
+
+    /**
+     * 允许的生命比例。
+     * @default 0.5, 1, 2, 3, 5
+     */
+    public static const HP_OPTIONS:Array = [0.5, 1, 2, 3, 5];
+    /**
+     * 允许的回合时间（秒），<code>-1</code> 为无限。
+     * @default 30, 60, 90, -1
+     */
+    public static const TIME_OPTIONS:Array = [30, 60, 90, -1];
+    /**
+     * 默认生命比例。
+     * @default 1
+     */
+    public static const HP_DEFAULT:Number = 1;
+    /**
+     * 默认回合时间（秒）。
+     * @default 60
+     */
+    public static const TIME_DEFAULT:int = 60;
 
     /** @private */
     private static var _i:WebParams;
@@ -95,6 +118,38 @@ public class WebParams {
      * @default 3
      */
     public var inputDelay:int = 3;
+    /**
+     * 生命比例，取值见 <code>HP_OPTIONS</code>；房主据此设置并同步给客户端。
+     * @default 1
+     */
+    public var hp:Number = HP_DEFAULT;
+    /**
+     * 回合时间（秒），取值见 <code>TIME_OPTIONS</code>，<code>-1</code> 为无限；房主据此设置并同步给客户端。
+     * @default 60
+     */
+    public var time:int = TIME_DEFAULT;
+
+    /**
+     * 校验生命比例，非法值回落默认。
+     * @param value 待校验值。
+     * @return 合法的生命比例。
+     */
+    public static function normalizeHp(value:*):Number {
+        var n:Number = Number(value);
+
+        return HP_OPTIONS.indexOf(n) >= 0 ? n : HP_DEFAULT;
+    }
+
+    /**
+     * 校验回合时间，非法值回落默认。
+     * @param value 待校验值。
+     * @return 合法的回合时间（秒）。
+     */
+    public static function normalizeTime(value:*):int {
+        var n:Number = Number(value);
+
+        return TIME_OPTIONS.indexOf(n) >= 0 ? int(n) : TIME_DEFAULT;
+    }
 
     /**
      * 读取 FlashVars。
@@ -131,6 +186,12 @@ public class WebParams {
         }
         if (params['inputDelay']) {
             inputDelay = Math.max(1, Math.min(6, int(params['inputDelay'])));
+        }
+        if (params['hp']) {
+            hp = normalizeHp(params['hp']);
+        }
+        if (params['time']) {
+            time = normalizeTime(params['time']);
         }
     }
 }
