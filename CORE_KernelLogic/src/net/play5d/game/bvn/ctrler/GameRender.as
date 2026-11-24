@@ -31,8 +31,14 @@ public class GameRender {
 
     // 先于主渲染之前渲染
     private static var _beforeFuncs:Vector.<Function>;
-    // 主渲染
-    private static var _funcs:Dictionary = new Dictionary();
+    /** @private 主渲染：按首次注册顺序排列的归属条目，遍历顺序即调用顺序 */
+    private static var _entries:Vector.<RenderEntry> = new Vector.<RenderEntry>();
+    /** @private 归属 -> 条目，用于 O(1) 查找 */
+    private static var _entryMap:Dictionary = new Dictionary();
+    /** @private 主渲染是否正在遍历 */
+    private static var _rendering:Boolean = false;
+    /** @private 出现了已无函数的条目，需在合适时机整理 */
+    private static var _dirty:Boolean = false;
     // 后于主渲染之后渲染
     private static var _afterFuncs:Vector.<Function>;
 
@@ -82,22 +88,34 @@ public class GameRender {
     /**
      * 添加一个主渲染函数
      *
+     * <p>调用顺序固定为：归属首次注册的先后，同一归属内再按函数注册的先后，
+     * 与 <code>Dictionary</code> 的遍历顺序无关（联机锁帧要求各端顺序一致）。
+     * 遍历期间新增的归属排在末尾，本帧不会被调用；遍历期间向已有归属追加的函数同样本帧不调用。</p>
+     *
      * @param func 渲染函数
      * @param owner 渲染函数归属
      */
     public static function add(func:Function, owner:* = null):void {
         owner ||= 'anyone';
 
-        if (_funcs[owner] && _funcs[owner].indexOf(func) != -1) {
+        var entry:RenderEntry = _entryMap[owner];
+        if (entry) {
+            if (entry.funcs.indexOf(func) == -1) {
+                entry.funcs.push(func);
+            }
             return;
         }
 
-        _funcs[owner] ||= new Vector.<Function>();
-        _funcs[owner].push(func);
+        entry = new RenderEntry(owner);
+        entry.funcs.push(func);
+        _entryMap[owner] = entry;
+        _entries.push(entry);
     }
 
     /**
      * 移除一个主渲染函数
+     *
+     * <p>遍历期间可安全调用：归属条目的位置保持不变，清空后在本帧遍历结束时才整理。</p>
      *
      * @param func 渲染函数
      * @param owner 渲染函数归属
@@ -105,13 +123,21 @@ public class GameRender {
     public static function remove(func:Function, owner:* = null):void {
         owner ||= 'anyone';
 
-        if (!_funcs[owner]) {
+        var entry:RenderEntry = _entryMap[owner];
+        if (!entry) {
             return;
         }
 
-        var index:int = _funcs[owner].indexOf(func);
+        var index:int = entry.funcs.indexOf(func);
         if (index != -1) {
-            _funcs[owner].splice(index, 1);
+            entry.funcs.splice(index, 1);
+        }
+
+        if (entry.funcs.length == 0) {
+            _dirty = true;
+            if (!_rendering) {
+                compact();
+            }
         }
     }
 
@@ -149,6 +175,24 @@ public class GameRender {
         }
     }
 
+    /** @private 清理已无函数的归属条目，保持其余条目的相对顺序 */
+    private static function compact():void {
+        _dirty = false;
+
+        var kept:int = 0;
+        var entry:RenderEntry;
+        for (var i:int = 0; i < _entries.length; i++) {
+            entry = _entries[i];
+            if (entry.funcs.length == 0) {
+                delete _entryMap[entry.owner];
+                continue;
+            }
+
+            _entries[kept++] = entry;
+        }
+        _entries.length = kept;
+    }
+
     private static function render(e:Event):void {
         if (!isRender) {
             return;
@@ -171,17 +215,31 @@ public class GameRender {
         }
 
 
-        for each (var funcs:Vector.<Function> in _funcs) {
-            length = funcs.length;
-            for (i = 0; i < length; i++) {
-                if (i > funcs.length - 1) {
-                    break;
-                }
+        // 按注册顺序遍历归属；遍历期间条目列表只增不减，下标稳定，新增条目本帧不处理
+        var funcs:Vector.<Function>;
+        var j:int, count:int;
+        _rendering = true;
+        try {
+            count = _entries.length;
+            for (j = 0; j < count; j++) {
+                funcs  = _entries[j].funcs;
+                length = funcs.length;
+                for (i = 0; i < length; i++) {
+                    if (i > funcs.length - 1) {
+                        break;
+                    }
 
-                func = funcs[i] as Function;
-                if (func != null) {
-                    func();
+                    func = funcs[i] as Function;
+                    if (func != null) {
+                        func();
+                    }
                 }
+            }
+        }
+        finally {
+            _rendering = false;
+            if (_dirty) {
+                compact();
             }
         }
 
@@ -202,4 +260,18 @@ public class GameRender {
     }
 
 }
+}
+
+/** 主渲染归属条目。 @private */
+class RenderEntry {
+
+    /** @private 归属对象 */
+    public var owner:*;
+    /** @private 该归属下按注册顺序排列的渲染函数 */
+    public var funcs:Vector.<Function> = new Vector.<Function>();
+
+    public function RenderEntry(owner:*) {
+        this.owner = owner;
+    }
+
 }
