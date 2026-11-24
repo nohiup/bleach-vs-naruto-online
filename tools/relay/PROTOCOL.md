@@ -58,8 +58,21 @@ across messages (treat it as a byte stream — Ruffle delivers a TCP-like stream
 ## SWF <-> page
 
 FlashVars passed by the page: `web=1`, `role`, `token`, `nick`, `relayHost=bvn-game`, `relayPort=17511`.
+Optional: `mode` (`team` | `single`, default `single`), `inputDelay` (int 1-6, default 3; clamped; only the host's value is used, it is synced to the client at game start).
 
-SWF calls `window.bvnOnEvent(name, json)` via `ExternalInterface` with names:
-`connected`, `peerReady`, `matchStart`, `matchEnd`, `disconnected`, `ping` (`{"rtt":ms}`), `error` (`{"msg":...}`).
+SWF calls `window.bvnOnEvent(name, json)` via `ExternalInterface` (`json` is a JSON string):
 
-Page may call SWF callback `bvnLeave()` (registered with `ExternalInterface.addCallback`).
+| name | payload | meaning |
+|------|---------|---------|
+| `connected` | `{"role":"host"\|"client","nick":"..."}` | relay HELLO accepted |
+| `peerReady` | `{}` | both seats claimed |
+| `matchStart` | `{"role":"host"\|"client"}` | a match began |
+| `matchEnd` | `{"winner":"host"\|"client"}` or `{}` | match finished normally (winner omitted if unknown); not a disconnect, the session is then closed silently |
+| `stall` | `{"ms":int}` | waiting for the peer's input for `ms` ms (emitted after 500 ms, at most every 250 ms, only once a round has started) |
+| `resume` | `{"ms":int}` | the stall that was reported ended after `ms` ms |
+| `desync` | `{"round":int,"p1":[local,remote],"p2":[local,remote]}` | HP mismatch vs host at round sync (client only); match continues |
+| `disconnected` | `{"reason":"peer_left"\|"socket_close"\|"stall_timeout"\|"sync_error"\|"leave"}` | session failed or was left; `stall_timeout` = 10 s stall during a round |
+| `ping` | `{"rtt":ms}` | relay round trip |
+| `error` | `{"msg":"..."}` | non-fatal error |
+
+Page may call SWF callback `bvnLeave()` (registered with `ExternalInterface.addCallback`); it ends the session and emits `disconnected {"reason":"leave"}`.

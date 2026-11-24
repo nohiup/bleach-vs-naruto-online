@@ -23,7 +23,7 @@ package net.play5d.game.bvn.web.data {
  *
  * <p>参数名：<code>web</code>、<code>role</code>、<code>token</code>、<code>nick</code>、
  * <code>relayHost</code>、<code>relayPort</code>；另有可选 <code>mode</code>（<code>team</code> 为小队对战，
- * 其余为单人对战）。未带 <code>web=1</code> 时 <code>web</code> 为 <code>false</code>，壳按离线模式运行。</p>
+ * 其余为单人对战）与 <code>inputDelay</code>（输入延迟帧数，1–6，默认 3，仅房主生效）。未带 <code>web=1</code> 时 <code>web</code> 为 <code>false</code>，壳按离线模式运行。</p>
  *
  * @example
  * <listing version="3.0">
@@ -90,6 +90,11 @@ public class WebParams {
      * @default single
      */
     public var mode:String = 'single';
+    /**
+     * 输入延迟（帧），范围 1–6；房主据此设置锁帧输入延迟并随开局同步给客户端。
+     * @default 3
+     */
+    public var inputDelay:int = 3;
 
     /**
      * 读取 FlashVars。
@@ -123,6 +128,9 @@ public class WebParams {
         }
         if (params['mode']) {
             mode = String(params['mode']);
+        }
+        if (params['inputDelay']) {
+            inputDelay = Math.max(1, Math.min(6, int(params['inputDelay'])));
         }
     }
 }
