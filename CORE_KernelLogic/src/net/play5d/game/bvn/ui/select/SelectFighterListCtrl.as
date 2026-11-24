@@ -580,6 +580,45 @@ public class SelectFighterListCtrl {
     }
 
     /**
+     * 按角色 / 援助 id 查找当前列表中对应的格子（「更多角色」内的 id 归并到其所在的主格）。
+     *
+     * @param ids 角色或援助 id 列表。
+     * @return 与 <code>ids</code> 顺序一致且已找到的 <code>SelectFighterItem</code> 数组（未找到的跳过，不重复）。
+     */
+    public function findItemsByIds(ids:Array):Array {
+        var result:Array = [];
+        if (!_itemObj) {
+            return result;
+        }
+
+        for each(var id:String in ids) {
+            var found:SelectFighterItem = null;
+            var si:SelectFighterItem;
+
+            for each(si in _itemObj) {
+                if (si.fighterData && si.fighterData.id == id) {
+                    found = si;
+                    break;
+                }
+            }
+
+            if (!found) {
+                for each(si in _itemObj) {
+                    if (si.selectData && si.selectData.moreFighterIDs && si.selectData.moreFighterIDs.indexOf(id) != -1) {
+                        found = si;
+                        break;
+                    }
+                }
+            }
+
+            if (found && result.indexOf(found) == -1) {
+                result.push(found);
+            }
+        }
+        return result;
+    }
+
+    /**
      * 悬停（供 CursorCtrl / 鼠标）。
      */
     public function doHoverItem(target:SelectFighterItem):void {

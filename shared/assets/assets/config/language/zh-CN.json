@@ -4,6 +4,10 @@
       "enable" : "启用",
       "disable": "禁用"
     },
+    "select_fighter_stage"  : {
+      "picked"          : "已选定",
+      "waiting_opponent": "等待对手选择……"
+    },
     "asset_manager"         : {
       "sound" : "声音",
       "effect": "效果",

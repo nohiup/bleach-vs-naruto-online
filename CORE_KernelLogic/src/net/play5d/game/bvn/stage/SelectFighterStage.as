@@ -44,6 +44,7 @@ import net.play5d.game.bvn.input.GameInputType;
 import net.play5d.game.bvn.input.GameInputer;
 import net.play5d.game.bvn.ui.GameUI;
 import net.play5d.game.bvn.ui.select.SelectMapUI;
+import net.play5d.game.bvn.ui.select.SelectPickMarkCtrl;
 import net.play5d.game.bvn.ui.select.SelectUIFactory;
 import net.play5d.game.bvn.ui.select.SelectedFighterGroup;
 import net.play5d.game.bvn.ui.select.SelecterItemUI;
@@ -59,6 +60,15 @@ public class SelectFighterStage implements IStage {
 
     public static var AUTO_FINISH:Boolean = true;
 
+    /**
+     * 联机本机玩家：0 = 非联机（离线 / 单机）；1 = 房主（P1）；2 = 客户端（P2）。
+     *
+     * <p>非 0 时本机输入（键盘 / 鼠标 / 触屏）只能操作本侧选人器，对端选人器仅由 <code>setSelect</code> 驱动；
+     * 地图步骤只有房主可操作（房主确认后的地图随 <code>FIGHTER_FINISH</code> 同步给客户端）。
+     * 由 <code>SelectFighterServerLogic</code> / <code>SelectFighterClientLogic</code> 在 <code>init</code> / <code>dispose</code> 时设置。</p>
+     */
+    public static var LAN_LOCAL_PLAYER:int = 0;
+
     private var _ui:$select$MC_stgSelect;
     private var _fighterListUI:Sprite;
     private var _config:SelectStageConfigVO;
@@ -73,6 +83,8 @@ public class SelectFighterStage implements IStage {
     private var _twoPlayerSelectFin:Boolean;  //解决两玩家同时选人
     private var _modeFlow:ISelectModeFlow;
     private var _backMenuBtn:Sprite;
+    private var _pickMark:SelectPickMarkCtrl;
+    private var _selecterReady:Boolean;  //当前步骤选人器已就绪（可接收对端 SELECT）
 
     /**
      * 显示对象
@@ -174,6 +186,7 @@ public class SelectFighterStage implements IStage {
         _listCtrl = new SelectFighterListCtrl(_fighterListUI, _config);
         _listCtrl.tweenTime      = _tweenTime;
         _listCtrl.onSelectConfrim = playerSeltBack;
+        _pickMark = new SelectPickMarkCtrl(_fighterListUI, _ui);
 
         GameRender.add(render);
         GameInputer.focus();
@@ -192,17 +205,37 @@ public class SelectFighterStage implements IStage {
 
     }
 
-    public function setSelect(player:int, selects:Array):void {
+    /**
+     * 应用对端选择（联机）。
+     *
+     * @param player 对端玩家编号（1 / 2）。
+     * @param selects 选择结果数组。
+     * @return 已应用返回 <code>true</code>；本步选人器尚未就绪（转场中）返回 <code>false</code>，调用方应稍后重试。
+     */
+    public function setSelect(player:int, selects:Array):Boolean {
         var selt:SelecterItemUI = player == 1 ? _p1Slt : _p2Slt;
+        if (!_selecterReady || !selt || !selt.selectVO) {
+            return false;
+        }
+
         selt.setCurrentSelect(selects);
         selt.removeSelecter();
+        refreshPickMark(selt);
+        _pickMark.showWaiting(LAN_LOCAL_PLAYER, false);
         SoundCtrl.I.sndConfrim();
+
+        return true;
     }
 
     public function nextStep():void {
         var a:SelectFlowAction = _modeFlow.resolveNextStep(_curStep);
         if (a.nextStep >= 0) {
             _curStep = a.nextStep;
+        }
+
+        if (a.action != SelectFlowAction.NONE && a.action != SelectFlowAction.ENABLE_P2_WITH_P1_INPUT) {
+            _selecterReady = false;
+            _pickMark.clear();
         }
 
         switch (a.action) {
@@ -247,6 +280,10 @@ public class SelectFighterStage implements IStage {
      */
     public function destroy(back:Function = null):void {
         clear();
+        if (_pickMark) {
+            _pickMark.destroy();
+            _pickMark = null;
+        }
         GameRender.remove(render);
         GameInputer.enabled = false;
         SoundCtrl.I.BGM(null);
@@ -324,6 +361,11 @@ public class SelectFighterStage implements IStage {
     }
 
     private function clear():void {
+        _selecterReady = false;
+        if (_pickMark) {
+            _pickMark.clear();
+        }
+
         if (_listCtrl) {
             _listCtrl.clearItems();
         }
@@ -369,10 +411,17 @@ public class SelectFighterStage implements IStage {
             initSelecterP1();
             initSelecterP2();
             _twoPlayerSelectFin = false;
+            if (LAN_LOCAL_PLAYER != 0) {
+                var remoteSlt:SelecterItemUI = LAN_LOCAL_PLAYER == 1 ? _p2Slt : _p1Slt;
+                remoteSlt.remote  = true;
+                remoteSlt.enabled = false;
+            }
         }
         else {
             initSelecterP1();
         }
+
+        _selecterReady = true;
     }
 
     /**
@@ -527,6 +576,12 @@ public class SelectFighterStage implements IStage {
     }
 
     private function playerSeltBack(selt:SelecterItemUI):void {
+        if (selt.remote) {
+            return;
+        }
+
+        refreshPickMark(selt);
+
         if (selt.selectFinish()) {
             if (_modeFlow.shouldWaitBothPlayers()) {
                 GameEvent.dispatchEvent(GameEvent.SELECT_FIGHTER_STEP, selt.getCurrentSelectes());
@@ -535,9 +590,13 @@ public class SelectFighterStage implements IStage {
                 if (otherSlt && otherSlt.selectFinish() && !_twoPlayerSelectFin) {
                     _twoPlayerSelectFin = true;
                     if (!AUTO_FINISH) {
+                        selt.removeSelecter();
                         return;
                     }
                     nextStep();
+                }
+                else if (LAN_LOCAL_PLAYER != 0 && otherSlt && !otherSlt.selectFinish()) {
+                    _pickMark.showWaiting(LAN_LOCAL_PLAYER, true);
                 }
             }
             else {
@@ -553,6 +612,17 @@ public class SelectFighterStage implements IStage {
                 _listCtrl.moveSlt(selt, selt.x + move, selt.y, true);
             }
         }
+    }
+
+    /**
+     * 按选人器当前已确认的选择重建该玩家的「已选」标记。
+     */
+    private function refreshPickMark(selt:SelecterItemUI):void {
+        if (!_pickMark || !_listCtrl || !selt) {
+            return;
+        }
+
+        _pickMark.mark(selt == _p1Slt ? 1 : 2, _listCtrl.findItemsByIds(selt.getPickedIds()), selt.selectFinish());
     }
 
     private function initMap():void {
@@ -578,9 +648,15 @@ public class SelectFighterStage implements IStage {
         TweenLite.to(_mapSelectUI, 0.3, {
             x: oldX, y: oldY, scaleX: 1, scaleY: 1, ease: Back.easeOut, onComplete: function ():void {
                 if (_mapSelectUI) {
-                    _mapSelectUI.addMouseEvents(mapPrevHandler, mapNextHandler, mapConfrimHandler);
-                    _mapSelectUI.inputType = GameInputType.P1;
-                    _mapSelectUI.enabled   = true;
+                    //联机：地图只由房主选择，客户端仅等待（地图随 FIGHTER_FINISH 同步）
+                    if (LAN_LOCAL_PLAYER == 2) {
+                        _pickMark.showWaiting(2, true);
+                    }
+                    else {
+                        _mapSelectUI.addMouseEvents(mapPrevHandler, mapNextHandler, mapConfrimHandler);
+                        _mapSelectUI.inputType = GameInputType.P1;
+                        _mapSelectUI.enabled   = true;
+                    }
                 }
                 GameInputer.enabled = true;
             }

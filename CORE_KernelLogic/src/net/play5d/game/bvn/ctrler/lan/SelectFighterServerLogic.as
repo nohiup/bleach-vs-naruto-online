@@ -62,6 +62,7 @@ public class SelectFighterServerLogic {
         _queue   = new SelectFighterPendingQueue(applySelect);
 
         SelectFighterSyncPayload.disableAutoFinish();
+        SelectFighterStage.LAN_LOCAL_PLAYER = 1;
 
         GameEvent.addEventListener(GameEvent.SELECT_FIGHTER_STEP, onSelectStep);
         GameEvent.addEventListener(GameEvent.SELECT_FIGHTER_FINISH, onSelectFinish);
@@ -81,6 +82,7 @@ public class SelectFighterServerLogic {
         GameEvent.removeEventListener(GameEvent.ENTER_STAGE, onEnterStage);
 
         clearTimeout(_timeout);
+        SelectFighterStage.LAN_LOCAL_PLAYER = 0;
         if (_queue) {
             _queue.clear();
             _queue = null;
@@ -126,7 +128,9 @@ public class SelectFighterServerLogic {
             if (!stg) {
                 return false;
             }
-            stg.setSelect(2, arr[2]);
+            if (!stg.setSelect(2, arr[2])) {
+                return false;
+            }
             checkSelectFinish();
             break;
         case SelectFighterDataType.INDEX:
