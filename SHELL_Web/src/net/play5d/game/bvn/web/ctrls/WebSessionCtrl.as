@@ -20,6 +20,7 @@ package net.play5d.game.bvn.web.ctrls {
 import flash.text.TextField;
 import flash.text.TextFormat;
 import flash.utils.ByteArray;
+import flash.utils.getTimer;
 
 import net.play5d.game.bvn.MainGame;
 import net.play5d.game.bvn.ctrler.game_ctrls.GameCtrl;
@@ -27,12 +28,15 @@ import net.play5d.game.bvn.ctrler.lan.LANUtils;
 import net.play5d.game.bvn.ctrler.lan.LanClientSyncCore;
 import net.play5d.game.bvn.ctrler.lan.LanGameMenuCtrl;
 import net.play5d.game.bvn.ctrler.lan.LanServerSyncCore;
+import net.play5d.game.bvn.ctrler.lan.LanStallMonitor;
 import net.play5d.game.bvn.ctrler.lan.LockFrameClientLogic;
 import net.play5d.game.bvn.ctrler.lan.LockFrameLogic;
 import net.play5d.game.bvn.ctrler.lan.LockFrameServerLogic;
 import net.play5d.game.bvn.ctrler.lan.SelectFighterClientLogic;
 import net.play5d.game.bvn.ctrler.lan.SelectFighterServerLogic;
 import net.play5d.game.bvn.data.GameMode;
+import net.play5d.game.bvn.data.TeamID;
+import net.play5d.game.bvn.data.lan.LanNetConfig;
 import net.play5d.game.bvn.events.GameEvent;
 import net.play5d.game.bvn.interfaces.GameInterface;
 import net.play5d.game.bvn.stage.GameStage;
@@ -55,7 +59,9 @@ import net.play5d.game.bvn.web.views.WebWaitState;
  * 跳过 UDP 发现与主机列表。游戏资源加载完成且收到 <code>PEER_READY</code> 后，双方互发
  * <code>WEB_READY</code> 会话消息，都就绪才同时开始，避免一方尚未建好选人逻辑时丢包。</p>
  *
- * <p>对局结束（回到主菜单）、对手离开、连接断开或页面调用 <code>bvnLeave</code> 都会结束会话并关闭中继连接。</p>
+ * <p>对局正常结束（回到主菜单）上报 <code>matchEnd</code> 并关闭中继连接；对手离开、连接断开、卡顿超时、
+ * 同步错误或页面调用 <code>bvnLeave</code> 上报 <code>disconnected</code>。卡顿经 <code>stall</code> / <code>resume</code>
+ * 上报，失同步经 <code>desync</code> 上报（不中断对局）。</p>
  *
  * @example
  * <listing version="3.0">
@@ -68,6 +74,8 @@ import net.play5d.game.bvn.web.views.WebWaitState;
 public class WebSessionCtrl {
     /** @private 会话内就绪握手消息类型 */
     private static const MSG_READY:String = 'WEB_READY';
+    /** @private stall 事件最小上报间隔（毫秒） */
+    private static const STALL_EMIT_MS:int = 250;
 
     /** @private */
     private static var _i:WebSessionCtrl;
@@ -121,6 +129,12 @@ public class WebSessionCtrl {
     private var _clientSync:LanClientSyncCore;
     /** @private */
     private var _delayText:TextField;
+    /** @private 是否已开始回合（卡顿仅在此后上报与超时） */
+    private var _roundStarted:Boolean;
+    /** @private 上次上报 stall 的 <code>getTimer</code> 毫秒 */
+    private var _lastStallEmit:int;
+    /** @private 本次卡顿是否已上报过 stall */
+    private var _stallEmitted:Boolean;
 
     /**
      * 本机是否为房主且对战进行中。
@@ -320,6 +334,7 @@ public class WebSessionCtrl {
         GameEvent.addEventListener(GameEvent.GAME_START, onGameStart);
         GameEvent.addEventListener(GameEvent.GAME_END, onGameEnd);
         GameEvent.addEventListener(GameEvent.ENTER_STAGE, onEnterStage);
+        GameEvent.addEventListener(GameEvent.ROUND_START, onRoundStart);
 
         if (_isHost) {
             startHost();
@@ -342,6 +357,7 @@ public class WebSessionCtrl {
     private function startHost():void {
         GameInterface.instance.updateInputConfig();
         LockFrameLogic.I.initServer(renderHost);
+        LanNetConfig.inputDelay = WebParams.I.inputDelay;
         LANUtils.updateParams();
 
         _selectServer = new SelectFighterServerLogic();
@@ -349,6 +365,7 @@ public class WebSessionCtrl {
 
         _serverLogic = new LockFrameServerLogic();
         _serverLogic.init(_link, InputManager.I.socket_input_p1, InputManager.I.socket_input_p2);
+        bindStall(_serverLogic.stallMonitor);
 
         LanGameMenuCtrl.I.init(createExitDialog());
 
@@ -371,9 +388,12 @@ public class WebSessionCtrl {
 
         _clientLogic = new LockFrameClientLogic();
         _clientLogic.init(_link, InputManager.I.socket_input_p1, InputManager.I.socket_input_p2);
+        _clientLogic.fatalOnStallTimeout = false;
+        bindStall(_clientLogic.stallMonitor);
 
         _clientSync ||= new LanClientSyncCore(100);
         _clientSync.bind(_clientLogic, onSyncFatalError, _delayText);
+        _clientSync.onDesync = onDesync;
         _link.syncCore = _clientSync;
 
         GameCtrl.I.autoEndRoundAble    = false;
@@ -388,8 +408,6 @@ public class WebSessionCtrl {
         LanGameMenuCtrl.I.init(createExitDialog());
 
         LANUtils.updateParams();
-
-        GameEvent.addEventListener(GameEvent.ROUND_START, onRoundStart);
     }
 
     /** @private */
@@ -434,8 +452,64 @@ public class WebSessionCtrl {
         alertGame('alert.lan_client_ctrl.disconnect_title', 'alert.lan_client_ctrl.disconnect_error');
     }
 
+    /** @private 注册卡顿回调（房主与客户端共用） */
+    private function bindStall(monitor:LanStallMonitor):void {
+        monitor.onStall   = onStall;
+        monitor.onResume  = onResume;
+        monitor.onTimeout = onStallTimeout;
+    }
+
+    /** @private 卡顿预警：回合开始后才上报，最多每 250ms 一次 */
+    private function onStall(ms:int):void {
+        if (!_roundStarted || _left) {
+            return;
+        }
+
+        var now:int = getTimer();
+        if (_stallEmitted && now - _lastStallEmit < STALL_EMIT_MS) {
+            return;
+        }
+
+        _stallEmitted  = true;
+        _lastStallEmit = now;
+        WebBridge.emit('stall', {ms: ms});
+    }
+
+    /** @private 卡顿恢复 */
+    private function onResume(ms:int):void {
+        if (!_stallEmitted) {
+            return;
+        }
+
+        _stallEmitted = false;
+
+        if (!_left) {
+            WebBridge.emit('resume', {ms: ms});
+        }
+    }
+
+    /** @private 卡顿超时：回合开始后才放弃对局 */
+    private function onStallTimeout(ms:int):void {
+        if (!_roundStarted || _left) {
+            return;
+        }
+
+        finish('stall_timeout');
+        alertGame('alert.lan_client_ctrl.disconnect_title', 'alert.lan_client_ctrl.connection_interrupt');
+    }
+
+    /** @private 失同步：仅上报并记录，不中断对局 */
+    private function onDesync(round:int, localP1:Number, remoteP1:Number, localP2:Number, remoteP2:Number):void {
+        trace('WebSessionCtrl: desync round=' + round
+                + ' p1=' + localP1 + '/' + remoteP1
+                + ' p2=' + localP2 + '/' + remoteP2);
+        WebBridge.emit('desync', {round: round, p1: [localP1, remoteP1], p2: [localP2, remoteP2]});
+    }
+
     /** @private */
     private function onRoundStart(e:GameEvent):void {
+        _roundStarted = true;
+
         if (_clientSync) {
             _clientSync.onRoundStart();
         }
@@ -453,40 +527,46 @@ public class WebSessionCtrl {
             return;
         }
 
-        _matchEnded = true;
-        WebBridge.emit('matchEnd', {reason: 'finish'});
+        _matchEnded   = true;
+        _roundStarted = false;
+
+        var team:Object = GameCtrl.I.gameRunData.lastWinnerTeam;
+        if (team && team.id == TeamID.TEAM_1) {
+            WebBridge.emit('matchEnd', {winner: WebParams.ROLE_HOST});
+        }
+        else if (team && team.id == TeamID.TEAM_2) {
+            WebBridge.emit('matchEnd', {winner: WebParams.ROLE_CLIENT});
+        }
+        else {
+            WebBridge.emit('matchEnd', {});
+        }
     }
 
     /** @private 对局结束后回到主菜单即视为本局会话完成 */
     private function onEnterStage(e:GameEvent):void {
         if (active && e.param == MenuStage) {
-            finish('match_over');
+            finish('match_over', false);
         }
     }
 
-    /** @private 结束会话：释放对战资源、关闭连接、通知页面并显示等待界面 */
-    private function finish(reason:String):void {
+    /** @private 结束会话：释放对战资源、关闭连接并显示等待界面；<code>notify</code> 为 <code>false</code>（正常结束）时不发 <code>disconnected</code> */
+    private function finish(reason:String, notify:Boolean = true):void {
         if (_left) {
             return;
         }
 
         _left = true;
 
-        var matchRunning:Boolean = _matchStarted && !_matchEnded;
-
         disposeMatch();
-
-        if (matchRunning) {
-            _matchEnded = true;
-            WebBridge.emit('matchEnd', {reason: reason});
-        }
 
         if (_link) {
             _link.close();
             _link = null;
         }
 
-        WebBridge.emit('disconnected', {reason: reason});
+        if (notify) {
+            WebBridge.emit('disconnected', {reason: reason});
+        }
 
         refreshWait();
     }
@@ -497,6 +577,9 @@ public class WebSessionCtrl {
         GameEvent.removeEventListener(GameEvent.GAME_END, onGameEnd);
         GameEvent.removeEventListener(GameEvent.ENTER_STAGE, onEnterStage);
         GameEvent.removeEventListener(GameEvent.ROUND_START, onRoundStart);
+
+        _roundStarted = false;
+        _stallEmitted = false;
 
         if (!_matchStarted) {
             return;

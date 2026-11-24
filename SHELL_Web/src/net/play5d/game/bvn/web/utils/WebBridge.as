@@ -46,7 +46,8 @@ public class WebBridge {
     /**
      * 向页面上报事件。
      * @param name 事件名：<code>connected</code>、<code>peerReady</code>、<code>matchStart</code>、
-     * <code>matchEnd</code>、<code>disconnected</code>、<code>ping</code>、<code>error</code>。
+     * <code>matchEnd</code>、<code>disconnected</code>、<code>stall</code>、<code>resume</code>、<code>desync</code>、
+     * <code>ping</code>、<code>error</code>。
      * @param data 事件数据，序列化为 JSON；省略时为空对象。
      * @example
      * <listing version="3.0">
