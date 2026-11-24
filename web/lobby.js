@@ -1,0 +1,237 @@
+(function () {
+    "use strict";
+    var cfg = window.BVN_CONFIG || {};
+    var RELAY = cfg.RELAY_WS_BASE || "ws://localhost:8080";
+    var SWF_URL = cfg.SWF_URL || "bvn.swf";
+    var RUFFLE_URL = cfg.RUFFLE_URL;
+    var BACKOFF = [1000, 2000, 5000];
+    var NICK_RE = /^[A-Za-z0-9 _-]{1,16}$/;
+    var ERRORS = {
+        ROOM_FULL: "Room is full.",
+        BAD_NICK: "Invalid nickname (1-16 letters, digits, space, _ or -).",
+        BAD_PASSWORD: "Wrong room password.",
+        RATE_LIMIT: "Too many attempts, please wait a moment.",
+        ALREADY_JOINED: "You already joined this room."
+    };
+    var $ = function (id) { return document.getElementById(id); };
+    var screens = ["lobby", "game", "ended"];
+    var ws = null;
+    var retry = 0;
+    var retryTimer = null;
+    var online = false;
+    var room = { state: "EMPTY", players: [] };
+    var seat = null;
+    var joining = false;
+    var player = null;
+    var ruffleLoading = null;
+    function showScreen(name) {
+        screens.forEach(function (s) { $("screen-" + s).classList.toggle("hidden", s !== name); });
+    }
+    function setMsg(text) { $("msg").textContent = text || ""; }
+    function storeGet(k) { try { return localStorage.getItem(k); } catch (e) { return null; } }
+    function storeSet(k, v) { try { localStorage.setItem(k, v); } catch (e) { } }
+    function renderRoom() {
+        var st = $("room-status"), pl = $("room-players"), btn = $("btn-join"), dot = $("dot");
+        dot.className = "dot" + (online ? (room.state === "EMPTY" ? " on" : " wait") : "");
+        pl.textContent = "";
+        if (!online) {
+            st.textContent = "Server offline";
+            btn.textContent = "Join";
+            btn.disabled = true;
+            return;
+        }
+        if (room.state === "PLAYING") {
+            st.textContent = "In match (2/2)";
+            pl.textContent = room.players.join(" vs ");
+            btn.textContent = "Room is full";
+            btn.disabled = true;
+        } else if (room.state === "WAITING") {
+            st.textContent = "Waiting for opponent (1/2)";
+            pl.textContent = "Host: " + (room.players[0] || "?");
+            btn.textContent = "Join";
+            btn.disabled = joining;
+        } else {
+            st.textContent = "Empty (0/2)";
+            btn.textContent = "Join";
+            btn.disabled = joining;
+        }
+    }
+    function connect() {
+        clearTimeout(retryTimer);
+        var sock;
+        try { sock = new WebSocket(RELAY + "/lobby"); } catch (e) { scheduleRetry(); return; }
+        ws = sock;
+        sock.onopen = function () { retry = 0; online = true; renderRoom(); };
+        sock.onmessage = function (ev) {
+            var m;
+            try { m = JSON.parse(ev.data); } catch (e) { return; }
+            onLobbyMessage(m);
+        };
+        sock.onclose = function () {
+            if (ws !== sock) return;
+            ws = null;
+            online = false;
+            joining = false;
+            if (seat) endGame("Connection lost");
+            renderRoom();
+            scheduleRetry();
+        };
+        sock.onerror = function () { };
+    }
+    function scheduleRetry() {
+        var d = BACKOFF[Math.min(retry, BACKOFF.length - 1)];
+        retry++;
+        retryTimer = setTimeout(connect, d);
+    }
+    function send(obj) {
+        if (ws && ws.readyState === 1) ws.send(JSON.stringify(obj));
+    }
+    function onLobbyMessage(m) {
+        if (m.t === "status") {
+            room = { state: m.state, players: m.players || [] };
+            renderRoom();
+            updateOpponent();
+        } else if (m.t === "joined") {
+            joining = false;
+            seat = { role: m.role, token: m.token, nick: $("nick").value.trim(), peerReady: false };
+            startGame();
+        } else if (m.t === "error") {
+            joining = false;
+            setMsg(ERRORS[m.code] || ("Error: " + m.code));
+            renderRoom();
+        } else if (m.t === "reset") {
+            if (seat) endGame(m.reason === "PEER_LEFT" ? "Opponent left" : "Connection lost");
+        }
+    }
+    function updateOpponent() {
+        if (!seat) return;
+        var i = seat.role === "host" ? 1 : 0;
+        $("opp").textContent = room.players[i] || "...";
+    }
+    function onJoin() {
+        var nick = $("nick").value.trim();
+        if (!NICK_RE.test(nick)) { setMsg(ERRORS.BAD_NICK); return; }
+        storeSet("bvn.nick", nick);
+        setMsg("");
+        joining = true;
+        renderRoom();
+        send({ t: "join", nick: nick, password: $("pass").value });
+    }
+    function loadRuffle() {
+        if (window.RufflePlayer) return Promise.resolve();
+        if (ruffleLoading) return ruffleLoading;
+        ruffleLoading = new Promise(function (resolve, reject) {
+            var s = document.createElement("script");
+            s.src = RUFFLE_URL;
+            s.onload = resolve;
+            s.onerror = function () { ruffleLoading = null; reject(new Error("Failed to load Ruffle")); };
+            document.head.appendChild(s);
+        });
+        return ruffleLoading;
+    }
+    function startGame() {
+        $("ping").textContent = "-";
+        $("opp").textContent = "...";
+        $("invite").value = location.href;
+        $("overlay").classList.toggle("hidden", seat.role !== "host");
+        showScreen("game");
+        updateOpponent();
+        var mine = seat;
+        loadRuffle().then(function () {
+            if (seat !== mine) return;
+            var ruffle = window.RufflePlayer.newest();
+            player = ruffle.createPlayer();
+            $("player").appendChild(player);
+            player.load({
+                url: SWF_URL,
+                autoplay: "on",
+                letterbox: "on",
+                allowScriptAccess: true,
+                socketProxy: [{ host: "bvn-game", port: 17511, proxyUrl: RELAY + "/game" }],
+                parameters: {
+                    web: "1",
+                    role: mine.role,
+                    token: mine.token,
+                    nick: mine.nick,
+                    relayHost: "bvn-game",
+                    relayPort: "17511"
+                }
+            });
+            focusPlayer();
+        }).catch(function () {
+            if (seat === mine) { send({ t: "leave" }); endGame("Failed to load the game"); }
+        });
+    }
+    function focusPlayer() {
+        if (!player) return;
+        try { player.tabIndex = 0; player.focus(); } catch (e) { }
+    }
+    function destroyPlayer() {
+        if (player) {
+            try { if (typeof player.bvnLeave === "function") player.bvnLeave(); } catch (e) { }
+            try { player.remove(); } catch (e) { }
+            player = null;
+        }
+        $("player").textContent = "";
+    }
+    function endGame(text) {
+        seat = null;
+        destroyPlayer();
+        $("ended-msg").textContent = text;
+        showScreen("ended");
+    }
+    function leave() {
+        send({ t: "leave" });
+        seat = null;
+        destroyPlayer();
+        setMsg("");
+        showScreen("lobby");
+        renderRoom();
+    }
+    function copyInvite() {
+        var inp = $("invite");
+        var done = function () { $("btn-copy").textContent = "Copied"; setTimeout(function () { $("btn-copy").textContent = "Copy"; }, 1500); };
+        if (navigator.clipboard && navigator.clipboard.writeText) {
+            navigator.clipboard.writeText(inp.value).then(done, function () { inp.select(); });
+        } else {
+            inp.select();
+            try { document.execCommand("copy"); done(); } catch (e) { }
+        }
+    }
+    window.bvnOnEvent = function (name, json) {
+        var data = json;
+        if (typeof json === "string") { try { data = JSON.parse(json); } catch (e) { data = {}; } }
+        data = data || {};
+        if (!seat) return;
+        switch (name) {
+            case "peerReady":
+                seat.peerReady = true;
+                $("overlay").classList.add("hidden");
+                focusPlayer();
+                break;
+            case "matchStart":
+                focusPlayer();
+                break;
+            case "ping":
+                if (typeof data.rtt === "number") $("ping").textContent = Math.round(data.rtt) + " ms";
+                break;
+            case "disconnected":
+                endGame("Connection lost");
+                break;
+            case "error":
+                console.warn("SWF error:", data.msg);
+                break;
+        }
+    };
+    $("btn-join").addEventListener("click", onJoin);
+    $("btn-leave-game").addEventListener("click", leave);
+    $("btn-leave-wait").addEventListener("click", leave);
+    $("btn-back").addEventListener("click", function () { showScreen("lobby"); renderRoom(); });
+    $("btn-copy").addEventListener("click", copyInvite);
+    $("nick").addEventListener("keydown", function (e) { if (e.key === "Enter") onJoin(); });
+    $("pass").addEventListener("keydown", function (e) { if (e.key === "Enter") onJoin(); });
+    $("player-box").addEventListener("click", focusPlayer);
+    $("nick").value = storeGet("bvn.nick") || "";
+    renderRoom();
+    connect();
+})();
