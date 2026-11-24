@@ -1,0 +1,558 @@
+{
+  "txt"    : {
+    "options"               : {
+      "enable" : "Enable",
+      "disable": "Disable"
+    },
+    "select_fighter_stage"  : {
+      "picked"          : "READY",
+      "waiting_opponent": "Waiting for opponent…"
+    },
+    "asset_manager"         : {
+      "sound" : "Sound",
+      "effect": "Effect",
+      "font"  : "Font",
+      "bitmap": "Bitmap"
+    },
+    "game_loader"           : {
+      "fighter_id_error" : "Fighter id error!",
+      "assister_id_error": "Assist id error!",
+      "map_id_error"     : "Map id error!",
+      "load_swf_error"   : "Failed to load SWF file!"
+    },
+    "game_stage_load_ctrl"  : {
+      "map"             : "Map",
+      "fighter"         : "Fighter",
+      "assistant"       : "Assist",
+      "bgm"             : "BGM",
+      "loading_no_name" : "Loading [{itemName}] ({step}/{stepLength})",
+      "loading_has_name": "Loading [{itemName}] : {loadName} ({step}/{stepLength})"
+    },
+    "game_data"             : {
+      "load_fighter_fail"  : "Failed to load fighter data!",
+      "load_assistant_fail": "Failed to load assist data!",
+      "load_select_fail"   : "Failed to load select data!",
+      "load_map_fail"      : "Failed to load map data!",
+      "load_mission_fail"  : "Failed to load mission data!",
+      "load_musou_fail"    : "Failed to load Musou data!"
+    },
+    "game_interface"        : {
+      "team_play"            : "Team Mode",
+      "team_play_acrade"     : "Arcade",
+      "team_play_vs_people"  : "2P Battle",
+      "team_play_vs_CPU"     : "VS CPU",
+      "team_play_watch"      : "Watch CPU",
+      "single_play"          : "Single Mode",
+      "single_play_acrade"   : "Arcade",
+      "single_play_vs_people": "2P Battle",
+      "single_play_vs_CPU"   : "VS CPU",
+      "single_play_watch"    : "Watch CPU",
+      "musou_play"           : "Musou Mode",
+      "musou_acrade"         : "Musou Mode",
+      "option"               : "Settings",
+      "training"             : "Training",
+      "credits"              : "Credits",
+      "more_games"           : "More Games"
+    },
+    "common"                : {
+      "continue"   : "Continue",
+      "move_list"  : "Move List",
+      "back"       : "Back",
+      "apply"      : "Apply",
+      "cancel"     : "Cancel",
+      "yes"        : "Yes",
+      "no"         : "No",
+      "set_all"    : "Set All",
+      "set_default": "Restore Default Keys"
+    },
+    "pause_dialog"          : {
+      "game_title": "Back to Title"
+    },
+    "musou_pause_dialog"    : {
+      "back_map": "Back to World Map"
+    },
+    "lan_exit_dialog"       : {
+      "exit": "Leave LAN Game"
+    },
+    "set_btn_group"         : {
+      "p1_key_set"         : "P1 Key Settings",
+      "p2_key_set"         : "P2 Key Settings",
+      "com_level"          : "CPU Level",
+      "com_level_very_easy": "Very Easy",
+      "com_level_easy"     : "Easy",
+      "com_level_normal"   : "Normal",
+      "com_level_hard"     : "Hard",
+      "com_level_very_hard": "Very Hard",
+      "com_level_hell"     : "Hell",
+      "operate_mode"       : "Control Mode",
+      "operate_normal"     : "Normal",
+      "operate_classic"    : "Classic",
+      "life"               : "HP",
+      "time"               : "Battle Time",
+      "time_30"            : "30s",
+      "time_60"            : "60s",
+      "time_90"            : "90s",
+      "time_unlimited"     : "Unlimited",
+      "sound"              : "Sound Effects",
+      "bgm"                : "Music",
+      "quality"            : "Graphics Quality",
+      "quality_low"        : "Low",
+      "quality_medium"     : "Medium",
+      "quality_high"       : "High",
+      "quality_best"       : "Best",
+      "show_hp"            : "Show HP",
+      "hp_show"            : "Show",
+      "hp_hide"            : "Hide",
+      "p1_joystick_set"    : "P1 Gamepad Settings",
+      "p2_joystick_set"    : "P2 Gamepad Settings"
+    },
+    "joy_stick_set_ui"      : {
+      "none"           : "None",
+      "use_joy"        : "Bind Gamepad",
+      "buy_joy"        : "Recommended Gamepads",
+      "key_up2"        : "Up (Stick)",
+      "key_down2"      : "Down (Stick)",
+      "key_left2"      : "Left (Stick)",
+      "key_right2"     : "Right (Stick)",
+      "key_up"         : "Up (Button)",
+      "key_down"       : "Down (Button)",
+      "key_left"       : "Left (Button)",
+      "key_right"      : "Right (Button)",
+      "key_attack"     : "Attack",
+      "key_jump"       : "Jump",
+      "key_dash"       : "Dash",
+      "key_skill"      : "Skill",
+      "key_super_skill": "Super",
+      "key_special"    : "Special",
+      "key_waikai"     : "Bankai",
+      "key_back"       : "Back Key",
+      "key_select"     : "Confirm Key (Menu)"
+    },
+    "set_ctrl_btn_ui"       : {
+      "key_up"        : "Up",
+      "key_down"      : "Down",
+      "key_left"      : "Left",
+      "key_right"     : "Right",
+      "key_attack"    : "Attack",
+      "key_jump"      : "Jump",
+      "key_dash"      : "Dash",
+      "key_skill"     : "Skill",
+      "key_super_kill": "Super",
+      "key_special"   : "Special"
+    },
+    "set_btn_dialog"        : {
+      "push_key": "Press a key to set [{name}]"
+    },
+    "game_loading_stage"    : {
+      "prepare"       : "Initializing: preparing game resources",
+      "loading_config": "Initializing: loading config files",
+      "prepare_fail"  : "Initialization failed: could not prepare game resources!",
+      "config_fail"   : "Initialization failed: could not load config files!",
+      "loading_assets": "Initializing: loading game assets",
+      "loading_step"  : "Initializing: loading {itemName} assets ({step}/{totalStep})"
+    },
+    "credits_stage"         : {
+      "body": "Original: <a href='event:myEvent'>剑jian</a><br>Planning: 数字化流天、L、社长、Diazynez<br>Programming: Nagisa、Diazynez、BearBrine、パチュリー<br>Art: 数字化流天、L、V.临界幻想、小数、Azreal、影、赤炎、小海、主流、曦城子、酸菜鱼、<br>          卡布托、Future、Nagisa、惊鸿、杯梓、星空幻梦、花里、Just...<br>Testing: ゞ影孞&僮畵ヾ、成环、cat232181、无宇逆风、叽咕村夫、默默、小皮、山之叟、欲上天、<br>          LOTTU、肥宅正品、ppx、七米、星空幻梦、逝时_流光...<br>Contributors: 灰原·银、Grimm (Web release)<br>Liaison: Lemon_kenbai、黑羽、诺斯给给...<br>Operations: 多情丶回忆、FZCL石头门、纯白暮弦、风之旅人、寒窗听雨、黑猫、老秦、凌辰夜风、<br>          萌新、某个热爱理科的死宅、天双、御礼...<br>"
+    },
+    "game_interface_manager": {
+      "joy_set"           : "Button Settings",
+      "screen_mode"       : "Screen Mode",
+      "screen_fill"       : "Stretch",
+      "screen_ratio"      : "Keep Ratio",
+      "credits_footer"    : "Commit: <a href=\"{url}\" target=\"_blank\">{label}</a><br/>Website: <a href=\"http://www.1212321.com/\" target=\"_blank\">www.1212321.com</a>    Forum: <a href=\"http://bbs.1212321.com/\" target=\"_blank\">bbs.1212321.com</a><br/>Email: 5dplay@qun.mail.163.com (we're hiring)<br/>",
+      "lan_play"          : "LAN Battle",
+      "exit"              : "Exit Game",
+      "joystick_set"      : "Gamepad Settings",
+      "display_mode"      : "Display Mode",
+      "display_fullscreen": "Fullscreen",
+      "display_window"    : "Windowed"
+    },
+    "set_screen_btn_view"   : {
+      "preinstall" : "Preset Layout",
+      "type_1"     : "Preset 1",
+      "type_2"     : "Preset 2",
+      "alpha"      : "Button Opacity",
+      "sp_skill"   : "Super Button",
+      "wankai"     : "Bankai Button",
+      "special"    : "Assist/Burst/Substitution Button",
+      "auto_show"  : "Auto Show/Hide",
+      "always_show": "Always Show",
+      "custom"     : "Custom",
+      "apply"      : "OK"
+    },
+    "lan_host_create_dialog": {
+      "game_mode"       : "Game Mode",
+      "game_mode_team"  : "Team",
+      "game_mode_single": "Single",
+      "game_time"       : "Round Time",
+      "hp"              : "Fighter HP",
+      "host_name_label" : "Host Name:",
+      "mode_team_combo" : "TEAM VS - Team Mode"
+    },
+    "host_vo"               : {
+      "mode_team"  : "TEAM VS - Team Battle",
+      "mode_single": "SINGLE VS - Single Battle",
+      "full"       : "(Full)"
+    },
+    "lan_server_ctrl"       : {
+      "room_full"       : "Room is full",
+      "player_entering" : "{name} is entering the room...",
+      "player_exit_chat": "{name} left the room",
+      "kick_chat"       : "{name} has been kicked from the room",
+      "player_enter"    : "{name} joined the room",
+      "kick_out"        : "You have been kicked from the room"
+    },
+    "lan_game_state"        : {
+      "join"   : "Join Game",
+      "create" : "Create Game",
+      "profile": "Profile",
+      "exit"   : "Exit"
+    },
+    "host_detail_dialog"    : {
+      "game_mode"  : "Game Mode: {mode}",
+      "create_time": "Created: {time}"
+    },
+    "host_list_dialog"      : {
+      "page_suffix": "Page {page}"
+    },
+    "lan_room_state"        : {
+      "password"       : "Password: {password}",
+      "start_countdown": "Game starts in {sec}s"
+    }
+  },
+
+  "alert"  : {
+    "musou_ctrl"              : {
+      "need_more_money_title": "NEED MORE MONEY",
+      "need_more_money"      : "Not enough coins. You need {amount} more!"
+    },
+    "world_map"               : {
+      "not_open_title": "NOT OPEN",
+      "not_open"      : "Not available yet"
+    },
+    "joy_stick_set_ui"        : {
+      "no_joystick_title"   : "NO JOYSTICK CONNECT",
+      "no_joystick"         : "No gamepad detected",
+      "set_default_ok_title": "SET JOYSTICK DEFAULT SUCCESS",
+      "set_default_ok"      : "Default keys restored"
+    },
+    "coin_ui"                 : {
+      "money_title": "MONEY",
+      "money"      : "Got {amount} coins!"
+    },
+    "menu_stage"              : {
+      "update_title": "UPDATE"
+    },
+    "lan_client_ctrl"         : {
+      "disconnect_title"    : "DISCONNECT",
+      "disconnect_error"    : "An error occurred",
+      "disconnect_host"     : "Disconnected from host",
+      "connection_interrupt": "Connection lost"
+    },
+    "lan_server_ctrl"         : {
+      "player_exit_title": "PLAYER EXIT",
+      "player_exit"      : "A player left the room"
+    },
+    "update_ctrl"             : {
+      "force_update": "Your version is too old. Please update!"
+    },
+    "input_name_title"        : "FAIL",
+    "input_name"              : "Please enter a name",
+    "password_incorrect_title": "FAIL",
+    "password_incorrect"      : "Incorrect password",
+    "exit_title"              : "EXIT",
+    "input_host_name_title"   : "ERROR",
+    "input_host_name"         : "Please enter a host name",
+    "failed_title"            : "FAILED"
+  },
+
+  "confirm": {
+    "musou_ctrl"         : {
+      "unlock_fighter_title": "CONFIRM",
+      "unlock_fighter"      : "Unlock this fighter for {amount} coins?"
+    },
+    "world_map"          : {
+      "next_mission_title"     : "CONFIRM",
+      "next_mission"           : "Go to the next stage?",
+      "next_mission_all_finish": "All stages cleared. Enter the final stage?",
+      "exit_title"             : "EXIT",
+      "exit"                   : "Return to the main menu?"
+    },
+    "common"             : {
+      "back_menu_title": "BACK TITLE?",
+      "back_menu"      : "Return to the main menu?"
+    },
+    "musou_pause_dialog" : {
+      "back_map_title": "BACK MAP?",
+      "back_map"      : "Return to the world map?"
+    },
+    "update_ctrl"        : {
+      "optional_update"   : "A new version is available. Update now? {info}",
+      "update_info_prefix": "\nWhat's new: {detail}"
+    },
+    "set_screen_btn_view": {
+      "lose_custom_title": "Custom already set, are you sure ?",
+      "lose_custom"      : "Custom buttons are already set. Changing this will discard them. Continue?"
+    },
+    "exit_game_title"    : "EXIT GAME",
+    "exit_game"          : "Exit the game?"
+  },
+
+  "debug"  : {
+    "trace": {
+      "prefix": "* Trace : ",
+
+      "data"  : {
+        "asset_manager"         : {
+          "load_sound_fail"      : "Failed to load sound [{url}]!",
+          "load_swf_fail"        : "Failed to load SWF [{url}]!",
+          "load_font_bitmap_fail": "Failed to load font bitmap [{url}]!",
+          "load_font_xml_fail"   : "Failed to load font XML [{url}]!"
+        },
+        "game_loader"           : {
+          "fighter_id_error"  : "GameLoader.loadAndCacheFighter:: fighter [{fighterId}] does not exist!",
+          "fighter_load_error": "Error while loading fighter: {error}",
+          "assister_id_error" : "GameLoader.loadAssister:: assist [{fighterId}] does not exist!",
+          "map_id_error"      : "GameLoader.loadMap:: map [{mapId}] does not exist!",
+          "unload_cache_error": "GameLoader.dispose:: error while unloading cache: {error}"
+        },
+        "game_logic"            : {
+          "map_null"     : "Map is null!",
+          "set_game_mode": "Game mode set to: {mode}"
+        },
+        "sound_ctrl"            : {
+          "load_fight_bgm_fail": "SoundCtrl.loadFightBGM:: failed to load sound [{url}]!"
+        },
+        "game_ctrl"             : {
+          "cleared"     : "Cleared!",
+          "next"        : "Next stage...",
+          "continue"    : "Continue?",
+          "back_select" : "Back to character select...",
+          "time_over"   : "Time over!",
+          "current_mode": "Current mode: {mode}"
+        },
+        "game_stage_load_ctrl"  : {
+          "load_all_finish": "All resources loaded!"
+        },
+        "musou_ctrl"            : {
+          "wave_end"                 : "Wave ended!",
+          "wave_next"                : "Next wave...",
+          "time_over"                : "Musou mode time over!",
+          "time_over_complete"       : "Musou mode onTimeOver event complete!",
+          "self_die"                 : "Musou mode fighter died!",
+          "self_die_complete"        : "Musou mode onSelfDead event complete!",
+          "mission_complete"         : "Musou mode mission complete!",
+          "mission_complete_complete": "Musou mode missionComplete event complete!",
+          "show_fzqi"                : "Assist energy (FZQI) ======================= fzqi: {fzqi}, fzqiMax: {fzqiMax}",
+          "boss_die"                 : "Musou mode BOSS died!"
+        },
+        "musou_enemy_bar_ctrl"  : {
+          "remove_bar_error": "Error removing enemy bar!"
+        },
+        "musou_logic"           : {
+          "open_map_area": "Opened map area: {areaId}"
+        },
+        "fighter_vo"            : {
+          "undefined_bgm": "FighterVO.initByXML:: fighter {fighterId} has no BGM defined!"
+        },
+        "game_data"             : {
+          "load_select_error": "Error loading select data!"
+        },
+        "mission_model"         : {
+          "p1_data"         : "P1 data: {data}",
+          "p2_data"         : "P2 data: {data}",
+          "mission_all_over": "All missions completed!"
+        },
+        "musou_fighter_model"   : {
+          "repeat_add": "MusouFighterModel.addFighter:: fighter added twice: {fighterId}"
+        },
+        "musou_model"           : {
+          "load_area"    : "Loading area: {areaUrl}",
+          "init_map_area": "Initializing map area: {areaId}"
+        },
+        "musou_game_run_data_vo": {
+          "main": "Created a new MusouGameRunDataVO object"
+        },
+        "musou_fighter_vo"      : {
+          "level_up": "=============== Level up! ==============="
+        },
+        "musou_player_data"     : {
+          "init_map": "Initializing map..."
+        },
+        "debugger"              : {
+          "error_msg": "Debugger.errorMsg:: message: {message}"
+        },
+        "debug_util"            : {
+          "debug_position": "DebugUtil.debugPosition:: debug position failed!"
+        },
+        "fighter_mc"            : {
+          "keyframe_not_exist": "Keyframe does not exist: {name}"
+        },
+        "fighter_action_logic"  : {
+          "enabled_failed": "FighterActionLogic.enabled:: enable failed: {error}"
+        },
+        "fighter_ctrler"        : {
+          "set_ctrler_fail": "Failed to set ctrler!"
+        },
+        "set_ctrl_btn_ui"       : {
+          "key_mc_missing": "mc[k{index}] does not exist!"
+        },
+        "joy_sticker"           : {
+          "platform_unsupported": "Gamepads are not supported on this platform!"
+        },
+        "game_loading_stage"    : {
+          "progress_over_100": "{where}:: progress exceeded 100%"
+        },
+        "select_fighter_stage"  : {
+          "start_game"  : "Start game",
+          "init_fighter": "Initialize fighter select",
+          "init_assist" : "Initialize assist select",
+          "select_map"  : "Select map"
+        },
+        "root_sprite"           : {
+          "current_font": "Current font: {fontName}"
+        },
+        "udp_socket"            : {
+          "broadcast_fail": "Failed to get broadcast address!"
+        },
+        "lan_room_state"        : {
+          "player_exists": "player: {id} already exists!"
+        }
+      }
+    },
+    "log"  : {
+      "prefix": "* Log : ",
+
+      "data"  : {
+        "game_loader"           : {
+          "load_swf_error": "GameLoader.loadSWF:: error loading SWF file: {url}"
+        },
+        "game_ctrl"             : {
+          "team_null": "GameCtrl.addGameSprite:: variable '{name}' is null!"
+        },
+        "game_main_logic_ctrler": {
+          "render_game_sprite": "GameMainLogicCtrl.renderGameSprite:: {error}"
+        },
+        "game_loading_stage"    : {
+          "preload_fail": "Initialization failed: could not prepare game resources: {error}",
+          "config_fail" : "Initialization failed: could not load config files: {error}"
+        },
+        "select_fighter_stage"  : {
+          "fighter_data_missing": "SelectFighterStage.addFighterItem:: fighter data not found: {fighterId}",
+          "pos_undefined"       : "pos undefined {psn}{posSN}",
+          "pos_x_oob"           : "pos.x out of bounds {detail}",
+          "pos_y_oob"           : "pos.y out of bounds {detail}"
+        },
+        "fighter_effect_ctrl"   : {
+          "undefined_bisha": "Super close-up not defined: {id}"
+        }
+      }
+    },
+    "error": {
+      "prefix": "* Error : ",
+
+      "data"  : {
+        "game_ctrl"           : {
+          "build_game_fail": "Failed to build game!"
+        },
+        "game_stage_load_ctrl": {
+          "not_find_main_mc"       : "Symbol {mainMc} not found in [{fileUrl}]!",
+          "get_map_data_fail"      : "Failed to get map data!",
+          "get_fighter_data_fail"  : "Failed to get fighter data!",
+          "get_assistant_data_fail": "Failed to get assist data!"
+        },
+        "musou_ctrl"          : {
+          "build_game_fail": "Failed to build game!"
+        },
+        "game_data"           : {
+          "verify_select_fail"       : "Failed to verify {file}! Message: [{message}]",
+          "verify_mission_fail"      : "Failed to verify {file}! Message: [{message}]",
+          "verify_musou_fail"        : "Musou data [{musouId}] verification failed! {type} data not found: [{value}]",
+          "verify_fighter_model_fail": "FighterModel verification failed! Message: [{message}]"
+        },
+        "musou_mission_vo"    : {
+          "init_musou_stage_fail": "Failed to initialize Musou stage!"
+        },
+        "assister"            : {
+          "init_fail": "Initialization failed! Function {functionName} is not defined"
+        },
+        "bullet"              : {
+          "do_hit": "Failed to go to frame [{frame}]!"
+        },
+        "fighter_attacker"    : {
+          "unsupported_type": "Unsupported type!"
+        },
+        "fighter_main"        : {
+          "main_mc_is_null"           : "Failed to create fighter! mainMc is null!",
+          "fighter_ctrler_initialized": "fighter is already initialized!"
+        },
+        "fighter_mc"          : {
+          "render_animate" : "FighterMC.renderAnimate:: render error: {stackTrace}",
+          "go_frame"       : "FighterMC.goFrame:: render error: {stackTrace}",
+          "render_children": "FighterMC.renderChildren:: render error: {stackTrace}"
+        },
+        "language_stage"      : {
+          "element_count_mismatch": "Language element count mismatch!",
+          "unsupported_language"  : "Unsupported language!"
+        },
+        "game_camera"         : {
+          "zoom_invalid": "zoom cannot be <= 0!"
+        },
+        "game_stage"          : {
+          "camera_already_init": "Game camera already initialized!"
+        },
+        "res_utils"           : {
+          "init_in_progress": "Initialization in progress, cannot initialize again!",
+          "swf_lib_not_init": "SwfLib is not initialized!",
+          "not_initialized" : "Not initialized!"
+        },
+        "embed_swf_asset_util": {
+          "init_in_progress": "Initialization in progress, cannot initialize again!",
+          "not_initialized" : "Not initialized!"
+        },
+        "embed_swf"           : {
+          "no_movie_clip_data": "No movieClipData found in swf!"
+        },
+        "selecter_item_ui"    : {
+          "select_vo_unset": "selectVO is not set!"
+        },
+        "ad_event_listener"   : {
+          "already_listen": "{action} is already being listened to; only one listener is supported!"
+        },
+        "ad_group"            : {
+          "add_ad_first": "add ad first!"
+        }
+      }
+    }
+  },
+
+  "dev"    : {
+    "txt": {
+      "fighter_tester"         : {
+        "p1_fighter_id"       : "P1 fighter id",
+        "p1_assistant_id"     : "P1 assist id",
+        "p2_fighter_id"       : "P2 fighter id",
+        "p2_assistant_id"     : "P2 assist id",
+        "map_id"              : "Map id",
+        "game_fps"            : "Game FPS",
+        "training_recover"    : "Training recovery",
+        "error_message_prompt": "Error messages...",
+        "btn_test"            : "Test",
+        "show_hit_area"       : "Show hitboxes",
+        "hide_hit_area"       : "Hide hitboxes",
+        "show_sprite_bounds"  : "Show sprite bounds",
+        "hide_sprite_bounds"  : "Hide sprite bounds",
+        "theme_light"         : "Light",
+        "theme_dark"          : "Dark"
+      },
+      "sprite_inspector_window": {
+        "idle"        : "Click an entity to lock tracking\nRight-click to clear tracking",
+        "title"       : "Sprite Inspector",
+        "title_locked": "Sprite · {name}"
+      },
+      "game_interface_manager" : {
+        "commit": "Commit: <a href=\"{url}\" target=\"_blank\">{label}</a><br/>"
+      }
+    }
+  }
+}
