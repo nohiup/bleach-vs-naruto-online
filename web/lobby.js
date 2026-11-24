@@ -11,7 +11,9 @@
         BAD_NICK: "Invalid nickname (1-16 letters, digits, space, _ or -).",
         BAD_PASSWORD: "Wrong room password.",
         RATE_LIMIT: "Too many attempts, please wait a moment.",
-        ALREADY_JOINED: "You already joined this room."
+        ALREADY_JOINED: "You already joined this room.",
+        NOT_HOST: "Only the host can change room settings.",
+        SETTINGS_LOCKED: "Settings are locked: the match has started."
     };
     var HP_OPTS = ["0.5", "1", "2", "3", "5"];
     var TIME_OPTS = ["30", "60", "90", "-1"];
@@ -21,7 +23,7 @@
     var retry = 0;
     var retryTimer = null;
     var online = false;
-    var room = { state: "EMPTY", players: [] };
+    var room = { state: "EMPTY", players: [], settings: null };
     var seat = null;
     var joining = false;
     var player = null;
@@ -50,10 +52,81 @@
     function setMsg(text) { $("msg").textContent = text || ""; }
     function storeGet(k) { try { return localStorage.getItem(k); } catch (e) { return null; } }
     function storeSet(k, v) { try { localStorage.setItem(k, v); } catch (e) { } }
+    // own saved preferences (never overwritten by the host's values shown to a joiner)
+    function prefs() {
+        var d = parseInt(storeGet("bvn.delay"), 10), hp = storeGet("bvn.hp"), t = storeGet("bvn.time");
+        return {
+            hp: Number(HP_OPTS.indexOf(hp) >= 0 ? hp : "1"),
+            time: parseInt(TIME_OPTS.indexOf(t) >= 0 ? t : "60", 10),
+            inputDelay: d >= 1 && d <= 6 ? d : 3
+        };
+    }
+    function savePrefs(s) {
+        storeSet("bvn.delay", String(s.inputDelay));
+        storeSet("bvn.hp", String(s.hp));
+        storeSet("bvn.time", String(s.time));
+    }
+    function readSel(p) {
+        var d = parseInt($(p + "delay").value, 10), hp = $(p + "hp").value, t = $(p + "time").value;
+        return {
+            hp: Number(HP_OPTS.indexOf(hp) >= 0 ? hp : "1"),
+            time: parseInt(TIME_OPTS.indexOf(t) >= 0 ? t : "60", 10),
+            inputDelay: d >= 1 && d <= 6 ? d : 3
+        };
+    }
+    function writeSel(p, s) {
+        $(p + "delay").value = String(s.inputDelay);
+        $(p + "hp").value = String(s.hp);
+        $(p + "time").value = String(s.time);
+    }
+    function cleanSettings(s) {
+        if (!s || typeof s !== "object") return null;
+        var hp = Number(s.hp), t = parseInt(s.time, 10), d = parseInt(s.inputDelay, 10);
+        if (HP_OPTS.indexOf(String(hp)) < 0 || TIME_OPTS.indexOf(String(t)) < 0 || !(d >= 1 && d <= 6)) return null;
+        return { hp: hp, time: t, inputDelay: d };
+    }
+    function fmtSettings(s) {
+        return "Life " + Math.round(s.hp * 100) + "% \u00b7 Time " + (s.time < 0 ? "\u221e" : s.time + "s") + " \u00b7 Delay " + s.inputDelay;
+    }
+    // lobby selects: editable (own prefs) when room is empty, else read-only copy of the host's settings
+    function renderSettings() {
+        var ro = !seat && online && room.state !== "EMPTY" && !!room.settings;
+        ["delay", "hp", "time"].forEach(function (k) { $(k).disabled = ro; });
+        writeSel("", ro ? room.settings : prefs());
+        $("hs-legend").textContent = ro ? "Set by host (read-only)" : "Host settings";
+        $("hs-help").textContent = ro ? "The room host chose these settings." : "Applied when you create the room (first to join). The opponent uses your settings.";
+        if (!seat) return;
+        var rs = room.settings || seat.settings;
+        var edit = seat.role === "host" && !seat.locked && room.state !== "PLAYING";
+        $("ov-settings").classList.toggle("hidden", !edit);
+        if (edit && room.settings && !seat.dirty) writeSel("ov-", room.settings);
+        var showRo = !edit && !!rs;
+        $("roomset").textContent = showRo ? "Room: " + fmtSettings(rs) : "";
+        $("roomset").classList.toggle("hidden", !showRo || !$("match").classList.contains("hidden"));
+        $("ov-readonly").textContent = !edit && rs ? "Set by host (read-only): " + fmtSettings(rs) : "";
+        $("ov-readonly").classList.toggle("hidden", edit || !rs);
+        ["delay", "hp", "time"].forEach(function (k) { $("ov-" + k).disabled = !edit; });
+    }
+    function lockSettings() {
+        if (!seat || seat.locked) return;
+        seat.locked = true;
+        renderSettings();
+    }
+    function onHostChange() {
+        if (!seat || seat.role !== "host" || seat.locked || room.state === "PLAYING") return;
+        var s = readSel("ov-");
+        savePrefs(s);
+        seat.settings = s;
+        seat.dirty = true;
+        $("ov-msg").textContent = "";
+        send({ t: "settings", settings: s });
+        try { if (player && typeof player.bvnSetSettings === "function") player.bvnSetSettings(JSON.stringify(s)); } catch (e) { }
+    }
     function renderRoom() {
         var st = $("room-status"), pl = $("room-players"), btn = $("btn-join"), dot = $("dot");
         dot.className = "dot" + (online ? (room.state === "EMPTY" ? " on" : " wait") : "");
         pl.textContent = "";
+        renderSettings();
         if (!online) {
             st.textContent = "Server offline";
             btn.textContent = "Join";
@@ -108,15 +181,25 @@
     }
     function onLobbyMessage(m) {
         if (m.t === "status") {
-            room = { state: m.state, players: m.players || [] };
+            room = { state: m.state, players: m.players || [], settings: cleanSettings(m.settings) };
+            if (seat && room.state === "PLAYING") seat.locked = true;
+            if (seat && room.settings) seat.dirty = false;
             renderRoom();
             updateOpponent();
         } else if (m.t === "joined") {
             joining = false;
-            seat = { role: m.role, token: m.token, nick: $("nick").value.trim(), peerReady: false };
+            seat = { role: m.role, token: m.token, nick: $("nick").value.trim(), peerReady: false, locked: false, dirty: false, settings: cleanSettings(m.settings) || prefs() };
             startGame();
         } else if (m.t === "error") {
             joining = false;
+            if (seat && (m.code === "NOT_HOST" || m.code === "SETTINGS_LOCKED")) {
+                if (m.code === "SETTINGS_LOCKED") seat.locked = true;
+                seat.dirty = false;
+                $("ov-msg").textContent = ERRORS[m.code];
+                if (room.settings) { seat.settings = room.settings; writeSel("ov-", room.settings); }
+                renderSettings();
+                return;
+            }
             setMsg(ERRORS[m.code] || ("Error: " + m.code));
             renderRoom();
         } else if (m.t === "reset") {
@@ -136,7 +219,7 @@
         setMsg("");
         joining = true;
         renderRoom();
-        send({ t: "join", nick: nick, password: $("pass").value });
+        send({ t: "join", nick: nick, password: $("pass").value, settings: prefs() });
     }
     function loadRuffle() {
         quietRuffle();
@@ -159,6 +242,9 @@
         hideDesync();
         hideMatch();
         $("overlay").classList.toggle("hidden", seat.role !== "host");
+        $("ov-msg").textContent = "";
+        writeSel("ov-", seat.settings);
+        renderSettings();
         showScreen("game");
         updateOpponent();
         var mine = seat;
@@ -166,9 +252,9 @@
             if (seat !== mine) return;
             var params = { web: "1", role: mine.role, token: mine.token, nick: mine.nick, relayHost: "bvn-game", relayPort: "17511" };
             if (mine.role === "host") {
-                params.inputDelay = String(getDelay());
-                params.hp = getHp();
-                params.time = getTime();
+                params.inputDelay = String(mine.settings.inputDelay);
+                params.hp = String(mine.settings.hp);
+                params.time = String(mine.settings.time);
             }
             var ruffle = window.RufflePlayer.newest();
             player = ruffle.createPlayer();
@@ -186,24 +272,13 @@
             if (seat === mine) { send({ t: "leave" }); endGame("Failed to load the game"); }
         });
     }
-    function getDelay() {
-        var v = parseInt($("delay").value, 10);
-        return v >= 1 && v <= 6 ? v : 3;
-    }
-    function getHp() {
-        var v = $("hp").value;
-        return HP_OPTS.indexOf(v) >= 0 ? v : "1";
-    }
-    function getTime() {
-        var v = $("time").value;
-        return TIME_OPTS.indexOf(v) >= 0 ? v : "60";
-    }
-    function hideMatch() { $("match").textContent = ""; $("match").classList.add("hidden"); }
+    function hideMatch() { $("match").textContent = ""; $("match").classList.add("hidden"); $("roomset").classList.add("hidden"); }
     function showMatch(d) {
         var hp = Number(d.hp), t = Number(d.time);
         if (!isFinite(hp) || !isFinite(t)) return;
         $("match").textContent = "Life " + Math.round(hp * 100) + "% · Time " + (t < 0 ? "∞" : t + "s");
         $("match").classList.remove("hidden");
+        $("roomset").classList.add("hidden");
     }
     function focusPlayer() {
         if (!player) return;
@@ -256,12 +331,15 @@
             case "peerReady":
                 seat.peerReady = true;
                 $("overlay").classList.add("hidden");
+                lockSettings();
                 focusPlayer();
                 break;
             case "matchStart":
+                lockSettings();
                 focusPlayer();
                 break;
             case "matchSettings":
+                lockSettings();
                 showMatch(data);
                 break;
             case "ping":
@@ -301,12 +379,11 @@
     $("pass").addEventListener("keydown", function (e) { if (e.key === "Enter") onJoin(); });
     $("player-box").addEventListener("click", focusPlayer);
     $("nick").value = storeGet("bvn.nick") || "";
-    $("delay").value = String(Math.min(6, Math.max(1, parseInt(storeGet("bvn.delay"), 10) || 3)));
-    $("delay").addEventListener("change", function () { storeSet("bvn.delay", String(getDelay())); });
-    $("hp").value = HP_OPTS.indexOf(storeGet("bvn.hp")) >= 0 ? storeGet("bvn.hp") : "1";
-    $("time").value = TIME_OPTS.indexOf(storeGet("bvn.time")) >= 0 ? storeGet("bvn.time") : "60";
-    $("hp").addEventListener("change", function () { storeSet("bvn.hp", getHp()); });
-    $("time").addEventListener("change", function () { storeSet("bvn.time", getTime()); });
+    ["delay", "hp", "time"].forEach(function (k) {
+        $("ov-" + k).innerHTML = $(k).innerHTML;
+        $(k).addEventListener("change", function () { if (!$(k).disabled) savePrefs(readSel("")); });
+        $("ov-" + k).addEventListener("change", onHostChange);
+    });
     renderRoom();
     connect();
 })();

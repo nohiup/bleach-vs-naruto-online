@@ -17,8 +17,8 @@
             <label for="pass">Room password <span class="opt">(optional)</span></label>
             <input id="pass" type="password" autocomplete="off">
             <fieldset class="host-settings">
-                <legend>Host settings</legend>
-                <p class="help">Applied when you create the room (first to join). The opponent uses your settings.</p>
+                <legend id="hs-legend">Host settings</legend>
+                <p id="hs-help" class="help">Applied when you create the room (first to join). The opponent uses your settings.</p>
                 <div class="grid3">
                     <div>
                         <label for="delay">Input delay</label>
@@ -54,6 +54,7 @@
         <div class="topbar">
             <span>vs <strong id="opp">...</strong></span>
             <span>Ping <strong id="ping">-</strong></span>
+            <span id="roomset" class="match hidden"></span>
             <span id="match" class="match hidden"></span>
             <span id="desync" class="chip hidden"></span>
             <button id="btn-leave-game">Leave match</button>
@@ -68,6 +69,16 @@
                     <input id="invite" type="text" readonly>
                     <button id="btn-copy">Copy</button>
                 </div>
+                <div id="ov-settings" class="ov-settings hidden">
+                    <p class="help">Room settings (you are the host)</p>
+                    <div class="grid3">
+                        <div><label for="ov-delay">Input delay</label><select id="ov-delay"></select></div>
+                        <div><label for="ov-hp">Life</label><select id="ov-hp"></select></div>
+                        <div><label for="ov-time">Time</label><select id="ov-time"></select></div>
+                    </div>
+                    <p id="ov-msg" class="msg" role="alert"></p>
+                </div>
+                <p id="ov-readonly" class="help hidden"></p>
                 <button id="btn-leave-wait">Leave</button>
             </div>
         </div>
