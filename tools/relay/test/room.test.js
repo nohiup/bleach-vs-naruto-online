@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { Room } from '../src/room.js';
+import { Room, validateSettings } from '../src/room.js';
 
 const mk = (opts) => new Room({ tokenTtlMs: 15000, idleTimeoutMs: 10000, ...opts });
 
@@ -79,4 +79,30 @@ test('any seat leaving resets room to EMPTY', () => {
     assert.equal(r.state, 'EMPTY');
     assert.equal(r.leave(a).length, 0);
     assert.equal(r.join('c', '', 0).seat.role, 'host');
+});
+
+test('validateSettings: defaults, valid values, invalid fall back', () => {
+    const def = { hp: 1, time: 60, inputDelay: 3 };
+    assert.deepEqual(validateSettings(undefined), def);
+    assert.deepEqual(validateSettings(null), def);
+    assert.deepEqual(validateSettings({ hp: 0.5, time: -1, inputDelay: 6 }), { hp: 0.5, time: -1, inputDelay: 6 });
+    assert.deepEqual(validateSettings({ hp: 4, time: 45, inputDelay: 7 }), def);
+    assert.deepEqual(validateSettings({ hp: '2', time: '30', inputDelay: 1.5 }), def);
+    assert.equal(validateSettings({ inputDelay: 1 }).inputDelay, 1);
+});
+
+test('room settings: host join sets, client ignored, update rules, reset clears', () => {
+    const r = mk();
+    assert.equal(r.settings, null);
+    const h = r.join('h', '', 0, { hp: 2 }).seat;
+    assert.deepEqual(r.settings, { hp: 2, time: 60, inputDelay: 3 });
+    assert.deepEqual(r.updateSettings(h, { time: 30 }), { ok: true });
+    assert.deepEqual(r.settings, { hp: 1, time: 30, inputDelay: 3 });
+    const c = r.join('c', '', 0, { hp: 5 }).seat;
+    assert.equal(r.settings.time, 30);
+    assert.deepEqual(r.updateSettings(c, {}), { ok: false, code: 'NOT_HOST' });
+    assert.deepEqual(r.updateSettings(null, {}), { ok: false, code: 'NOT_HOST' });
+    assert.deepEqual(r.updateSettings(h, {}), { ok: false, code: 'SETTINGS_LOCKED' });
+    r.reset();
+    assert.equal(r.settings, null);
 });

@@ -7,6 +7,8 @@ import { encode, FrameParser, T } from '../src/frames.js';
 
 console.log = () => {};
 
+const DEF = { hp: 1, time: 60, inputDelay: 3 };
+
 /** Wraps a ws with a message queue so tests can await the next matching message. */
 function client(url, opts) {
     const ws = new WebSocket(url, opts);
@@ -64,14 +66,14 @@ test('full flow: lobby join, HELLO, PEER_READY, forward, disconnect resets', asy
     const l1 = client(`${base}/lobby`);
     const l2 = client(`${base}/lobby`);
     await Promise.all([l1.opened, l2.opened]);
-    assert.deepEqual(await l1.next(), { t: 'status', state: 'EMPTY', players: [] });
+    assert.deepEqual(await l1.next(), { t: 'status', state: 'EMPTY', players: [], settings: null });
     await l2.next();
     l1.ws.send(JSON.stringify({ t: 'join', nick: 'Ichigo' }));
     const j1 = await l1.next();
     assert.equal(j1.t, 'joined');
     assert.equal(j1.role, 'host');
-    assert.deepEqual(await l1.next(), { t: 'status', state: 'WAITING', players: ['Ichigo'] });
-    assert.deepEqual(await l2.next(), { t: 'status', state: 'WAITING', players: ['Ichigo'] });
+    assert.deepEqual(await l1.next(), { t: 'status', state: 'WAITING', players: ['Ichigo'], settings: DEF });
+    assert.deepEqual(await l2.next(), { t: 'status', state: 'WAITING', players: ['Ichigo'], settings: DEF });
     l2.ws.send(JSON.stringify({ t: 'join', nick: 'Naruto' }));
     const j2 = await l2.next();
     assert.equal(j2.role, 'client');
@@ -106,9 +108,9 @@ test('full flow: lobby join, HELLO, PEER_READY, forward, disconnect resets', asy
     assert.equal(left.type, T.PEER_LEFT);
     await g2.closed;
     assert.deepEqual(await l2.next(), { t: 'reset', reason: 'PEER_LEFT' });
-    assert.deepEqual(await l2.next(), { t: 'status', state: 'EMPTY', players: [] });
+    assert.deepEqual(await l2.next(), { t: 'status', state: 'EMPTY', players: [], settings: null });
     assert.equal(relay.room.state, 'EMPTY');
-    assert.deepEqual(await l1.next(), { t: 'status', state: 'EMPTY', players: [] });
+    assert.deepEqual(await l1.next(), { t: 'status', state: 'EMPTY', players: [], settings: null });
     [l1, l2].forEach((c) => c.ws.close());
     await relay.close();
 });
@@ -159,4 +161,62 @@ test('origin check', async () => {
     await ok.opened;
     ok.ws.close();
     await relay.close();
+});
+
+const send = (c, o) => c.ws.send(JSON.stringify(o));
+
+test('settings: host join with settings, update while WAITING, NOT_HOST, LOCKED, reset clears', async () => {
+    const { relay, base } = await start();
+    const l1 = client(`${base}/lobby`);
+    const l2 = client(`${base}/lobby`);
+    const l3 = client(`${base}/lobby`);
+    await Promise.all([l1.opened, l2.opened, l3.opened]);
+    for (const l of [l1, l2, l3]) assert.equal((await l.next()).settings, null);
+    const S = { hp: 2, time: 90, inputDelay: 5 };
+    send(l1, { t: 'join', nick: 'Host', settings: S });
+    const j1 = await l1.next();
+    assert.deepEqual(j1.settings, S);
+    assert.deepEqual((await l1.next()).settings, S);
+    await l2.next();
+    await l3.next();
+    // unseated socket
+    send(l3, { t: 'settings', settings: DEF });
+    assert.deepEqual(await l3.next(), { t: 'error', code: 'NOT_HOST' });
+    // host update (invalid fields fall back to defaults)
+    send(l1, { t: 'settings', settings: { hp: 3, time: 7, inputDelay: 9 } });
+    const upd = { hp: 3, time: 60, inputDelay: 3 };
+    assert.deepEqual((await l1.next()).settings, upd);
+    assert.deepEqual((await l3.next()).settings, upd);
+    await l2.next();
+    // client join ignores its settings and receives room settings
+    send(l2, { t: 'join', nick: 'Guest', settings: { hp: 5, time: 30, inputDelay: 1 } });
+    assert.deepEqual((await l2.next()).settings, upd);
+    assert.deepEqual((await l2.next()).settings, upd);
+    await l1.next();
+    // client cannot change
+    send(l2, { t: 'settings', settings: DEF });
+    assert.deepEqual(await l2.next(), { t: 'error', code: 'NOT_HOST' });
+    // host locked while PLAYING
+    send(l1, { t: 'settings', settings: DEF });
+    assert.deepEqual(await l1.next(), { t: 'error', code: 'SETTINGS_LOCKED' });
+    assert.equal(relay.room.settings.hp, 3);
+    // reset clears
+    send(l1, { t: 'leave' });
+    assert.equal((await l3.next()).state, 'PLAYING');
+    const st = await l3.next();
+    assert.deepEqual([st.state, st.settings], ['EMPTY', null]);
+    assert.equal(relay.room.settings, null);
+    await relay.close();
+});
+
+test('settings: join without or with invalid settings uses defaults', async () => {
+    for (const settings of [undefined, 'x', { hp: 4, time: 45, inputDelay: 0 }, { hp: '2', inputDelay: 2.5 }]) {
+        const { relay, base } = await start();
+        const l = client(`${base}/lobby`);
+        await l.opened;
+        await l.next();
+        send(l, { t: 'join', nick: 'H', settings });
+        assert.deepEqual((await l.next()).settings, DEF);
+        await relay.close();
+    }
 });

@@ -17,17 +17,19 @@ browser shell (`SHELL_Web`). Change all three together.
 ## Lobby (`/lobby`, JSON)
 
 server -> client
-- `{"t":"status","state":"EMPTY"|"WAITING"|"PLAYING","players":["nick", ...]}` on connect and on every change
-- `{"t":"joined","role":"host"|"client","token":"<hex 32>"}` seat granted
-- `{"t":"error","code":"ROOM_FULL"|"BAD_NICK"|"BAD_PASSWORD"|"RATE_LIMIT"|"ALREADY_JOINED"}`
+- `{"t":"status","state":"EMPTY"|"WAITING"|"PLAYING","players":["nick", ...],"settings":{...}|null}` on connect and on every change; `settings` is the room settings while WAITING/PLAYING, `null` when EMPTY
+- `{"t":"joined","role":"host"|"client","token":"<hex 32>","settings":{...}}` seat granted; `settings` = current room settings
+- `{"t":"error","code":"ROOM_FULL"|"BAD_NICK"|"BAD_PASSWORD"|"RATE_LIMIT"|"ALREADY_JOINED"|"NOT_HOST"|"SETTINGS_LOCKED"}`
 - `{"t":"reset","reason":"PEER_LEFT"|"TIMEOUT"}` room was reset while you held a seat
 
 client -> server
-- `{"t":"join","nick":"...","password":"..."}` (`password` only checked if env `ROOM_PASSWORD` set)
+- `{"t":"join","nick":"...","password":"...","settings":{...}}` (`password` only checked if env `ROOM_PASSWORD` set; `settings` optional, used only if this join becomes the host, ignored for the client)
+- `{"t":"settings","settings":{...}}` host changes room settings; only from the lobby socket holding the host seat and only while WAITING, else `error` `NOT_HOST` (not the host / no seat) or `SETTINGS_LOCKED` (state PLAYING). On success a `status` is broadcast.
 - `{"t":"leave"}`
 
 Rules
 - First join = `host`, second = `client`, further -> `ROOM_FULL`.
+- Room settings (chosen by the host): `{"hp":<num>,"time":<int>,"inputDelay":<int>}`; `hp` in {0.5,1,2,3,5} (default 1), `time` in {30,60,90,-1} (-1 = unlimited, default 60), `inputDelay` integer 1..6 (default 3). Invalid or missing fields silently fall back to the default (a join is never rejected for bad settings). Settings reset to `null` when the room resets.
 - Nick: 1-16 chars, `[A-Za-z0-9 _-]`.
 - Token must be claimed by a `/game` HELLO within 15 s, else seat freed.
 - State: EMPTY (0 seated) -> WAITING (host seated) -> PLAYING (both seated).

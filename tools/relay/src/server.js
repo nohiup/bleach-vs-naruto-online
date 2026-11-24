@@ -56,8 +56,10 @@ export function createRelay(overrides = {}) {
     const lobbyWss = new WebSocketServer({ noServer: true, maxPayload: 2048 });
     const gameWss = new WebSocketServer({ noServer: true, maxPayload: 65536 });
 
+    const statusMsg = () => JSON.stringify({ t: 'status', state: room.state, players: room.players, settings: room.settings });
+
     function broadcastStatus() {
-        const msg = JSON.stringify({ t: 'status', state: room.state, players: room.players });
+        const msg = statusMsg();
         lobbies.forEach((ws) => send(ws, msg));
     }
 
@@ -92,6 +94,7 @@ export function createRelay(overrides = {}) {
             return;
         }
         if (msg && msg.t === 'join') join(ws, msg);
+        else if (msg && msg.t === 'settings') updateSettings(ws, msg);
         else if (msg && msg.t === 'leave' && ws.seat) {
             log('leave', { role: ws.seat.role, nick: ws.seat.nick });
             resetRoom('PEER_LEFT', ws.seat);
@@ -103,7 +106,7 @@ export function createRelay(overrides = {}) {
         const error = (code) => send(ws, JSON.stringify({ t: 'error', code }));
         if (!ws.joinRate(now)) return error('RATE_LIMIT');
         if (ws.seat) return error('ALREADY_JOINED');
-        const res = room.join(msg.nick, msg.password, now);
+        const res = room.join(msg.nick, msg.password, now, msg.settings);
         if (!res.ok) {
             log('join_rejected', { code: res.code, ip: ws.ip });
             return error(res.code);
@@ -112,7 +115,14 @@ export function createRelay(overrides = {}) {
         seat.lobby = ws;
         ws.seat = seat;
         log('join', { role: seat.role, nick: seat.nick, state: room.state });
-        send(ws, JSON.stringify({ t: 'joined', role: seat.role, token: seat.token }));
+        send(ws, JSON.stringify({ t: 'joined', role: seat.role, token: seat.token, settings: room.settings }));
+        broadcastStatus();
+    }
+
+    function updateSettings(ws, msg) {
+        const res = room.updateSettings(ws.seat, msg.settings);
+        if (!res.ok) return send(ws, JSON.stringify({ t: 'error', code: res.code }));
+        log('settings', { settings: room.settings });
         broadcastStatus();
     }
 
@@ -176,7 +186,7 @@ export function createRelay(overrides = {}) {
             lobbies.delete(ws);
             onClose(ws);
         });
-        send(ws, JSON.stringify({ t: 'status', state: room.state, players: room.players }));
+        send(ws, statusMsg());
     });
 
     gameWss.on('connection', (ws) => {
