@@ -67,8 +67,16 @@ function fetchRuffle(dst) {
         fs.rmSync(tmp, { recursive: true, force: true });
     }
 }
+// keep the Vercel project link across rebuilds so `vercel deploy --cwd dist/web` targets the same project
+const linkDir = path.join(outDir, ".vercel");
+const savedLink = fs.existsSync(linkDir) ? fs.mkdtempSync(path.join(os.tmpdir(), "bvn-vercel-")) : null;
+if (savedLink) copyDir(linkDir, savedLink);
 fs.rmSync(outDir, { recursive: true, force: true });
 copyDir(path.join(root, "web"), outDir, EXCLUDE_WEB);
+if (savedLink) {
+    copyDir(savedLink, linkDir);
+    fs.rmSync(savedLink, { recursive: true, force: true });
+}
 if (fs.existsSync(gameDir) && fs.statSync(gameDir).isDirectory()) {
     copyDir(gameDir, outDir);
     if (!fs.existsSync(path.join(outDir, "bvn.swf"))) warn(gameDir + " has no bvn.swf; the game will not load");
