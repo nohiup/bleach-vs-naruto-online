@@ -90,6 +90,8 @@ public class GameEvent extends Event {
     public static const FIGHT_LOADING_START:String  = 'FIGHT_LOADING_START';
     public static const FIGHT_LOADING:String        = 'FIGHT_LOADING';
     public static const FIGHT_LOADING_FINISH:String = 'FIGHT_LOADING_FINISH';
+    /** 出战资源加载完毕（早于 <code>FIGHT_LOADING_FINISH</code>；联机握手用） */
+    public static const FIGHT_ASSETS_LOADED:String  = 'FIGHT_ASSETS_LOADED';
 
     public static const FIGHT_START:String = 'FIGHT_START';
 
