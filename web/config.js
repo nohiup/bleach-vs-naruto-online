@@ -9,6 +9,8 @@
         // priority: ?relay= override > localhost default > config.prod.js value
         RELAY_WS_BASE: override || (isLocal ? "ws://localhost:8080" : (prod.RELAY_WS_BASE || "ws://localhost:8080")),
         SWF_URL: "bvn.swf",
+        // true: drop Ruffle's harmless "tag_utils.rs" console spam (everything else is kept)
+        QUIET_RUFFLE_LOG: true,
         RUFFLE_URL: prod.RUFFLE_URL || "https://unpkg.com/@ruffle-rs/ruffle@0.7.1/ruffle.js"
     };
 })();

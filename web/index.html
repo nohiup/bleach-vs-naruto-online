@@ -16,6 +16,11 @@
             <input id="nick" type="text" maxlength="16" autocomplete="off" placeholder="1-16 letters, digits, space, _ or -">
             <label for="pass">Room password <span class="opt">(optional)</span></label>
             <input id="pass" type="password" autocomplete="off">
+            <label for="delay">Input delay <span class="opt">(host only)</span></label>
+            <select id="delay" title="Higher = smoother on high ping, more input lag">
+                <option>1</option><option>2</option><option selected>3</option><option>4</option><option>5</option><option>6</option>
+            </select>
+            <p class="help">Higher = smoother on high ping, more input lag</p>
             <div class="room">
                 <div class="room-head"><span id="dot" class="dot"></span><strong>Room</strong></div>
                 <div id="room-status" class="room-status">Connecting...</div>
@@ -29,10 +34,12 @@
         <div class="topbar">
             <span>vs <strong id="opp">...</strong></span>
             <span>Ping <strong id="ping">-</strong></span>
+            <span id="desync" class="chip hidden"></span>
             <button id="btn-leave-game">Leave match</button>
         </div>
         <div id="player-box" class="player-box">
             <div id="player"></div>
+            <div id="stall" class="stall hidden" role="status"></div>
             <div id="overlay" class="overlay hidden">
                 <h2>Waiting for opponent (1/2)</h2>
                 <label for="invite">Invite link</label>
