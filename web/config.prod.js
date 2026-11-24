@@ -1,0 +1,1 @@
+window.BVN_PROD = {};
