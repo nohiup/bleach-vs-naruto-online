@@ -304,42 +304,93 @@ public class AssetManager {
     }
 
     private function loadSnds(sounds:Array, back:Function, progress:Function):void {
-        var snds:Array = sounds.concat();
-        var sndLen:int = snds.length;
-        var curUrl:String;
+        var pending:Array   = sounds.concat();
+        var sndLen:int      = pending.length;
+        var running:int     = 0;
+        var done:int        = 0;
+        var partial:Object  = {};
+        var seq:int         = 0;
+        var pumping:Boolean = false;
+        var again:Boolean   = false;
+        var ended:Boolean   = false;
 
-        loadNext();
+        pump();
 
-        function loadNext():void {
+        // 有界并发加载：同时最多 BitmapAssetLoader.MAX_CONCURRENT 个，全部结束后调用一次 back
+        function pump():void {
+            if (pumping) {
+                again = true;
+                return;
+            }
+            pumping = true;
+            do {
+                again = false;
+                while (running < BitmapAssetLoader.MAX_CONCURRENT && pending.length > 0) {
+                    startOne(pending.shift());
+                }
+            }
+            while (again);
+            pumping = false;
 
-            if (snds.length < 1) {
+            if (!ended && done >= sndLen) {
+                ended = true;
                 if (back != null) {
                     back();
                 }
+            }
+        }
+
+        function startOne(url:String):void {
+            var id:int       = seq++;
+            var over:Boolean = false;
+
+            running++;
+            _assetLoader.loadSound(url, loadCom, loadErr, loadProgress);
+
+            function loadCom(snd:Sound):void {
+                if (over) {
+                    return;
+                }
+                _soundLoader.addSound(url, snd);
+                _assetLoader.dispose(url);
+                end();
+            }
+
+            function loadErr():void {
+                if (over) {
+                    return;
+                }
+                TraceLang('debug.trace.data.asset_manager.load_sound_fail', {url: url});
+                end();
+            }
+
+            function loadProgress(v:Number):void {
+                if (over || isNaN(v)) {
+                    return;
+                }
+                partial[id] = v > 1 ? 1 : v;
+                report();
+            }
+
+            function end():void {
+                over = true;
+                delete partial[id];
+                running--;
+                done++;
+                report();
+                pump();
+            }
+        }
+
+        function report():void {
+            if (progress == null) {
                 return;
             }
-
-            curUrl = snds.shift();
-            _assetLoader.loadSound(curUrl, loadCom, loadErr, loadProgress);
-        }
-
-        function loadCom(snd:Sound):void {
-            _soundLoader.addSound(curUrl, snd);
-            _assetLoader.dispose(curUrl);
-            loadNext();
-        }
-
-        function loadErr():void {
-            TraceLang('debug.trace.data.asset_manager.load_sound_fail', {url: curUrl});
-            loadNext();
-        }
-
-        function loadProgress(v:Number):void {
-            if (progress != null) {
-                var cur:Number = sndLen - snds.length - 1 + v;
-                var p:Number   = cur / sndLen;
-                progress(p);
+            var cur:Number = done;
+            for each(var v:Number in partial) {
+                cur += v;
             }
+            progress(cur / sndLen);
         }
 
     }
