@@ -16,11 +16,31 @@
             <input id="nick" type="text" maxlength="16" autocomplete="off" placeholder="1-16 letters, digits, space, _ or -">
             <label for="pass">Room password <span class="opt">(optional)</span></label>
             <input id="pass" type="password" autocomplete="off">
-            <label for="delay">Input delay <span class="opt">(host only)</span></label>
-            <select id="delay" title="Higher = smoother on high ping, more input lag">
-                <option>1</option><option>2</option><option selected>3</option><option>4</option><option>5</option><option>6</option>
-            </select>
-            <p class="help">Higher = smoother on high ping, more input lag</p>
+            <fieldset class="host-settings">
+                <legend>Host settings</legend>
+                <p class="help">Applied when you create the room (first to join). The opponent uses your settings.</p>
+                <div class="grid3">
+                    <div>
+                        <label for="delay">Input delay</label>
+                        <select id="delay" title="Higher = smoother on high ping, more input lag">
+                            <option>1</option><option>2</option><option selected>3</option><option>4</option><option>5</option><option>6</option>
+                        </select>
+                    </div>
+                    <div>
+                        <label for="hp">Life</label>
+                        <select id="hp">
+                            <option value="0.5">50%</option><option value="1" selected>100%</option><option value="2">200%</option><option value="3">300%</option><option value="5">500%</option>
+                        </select>
+                    </div>
+                    <div>
+                        <label for="time">Time</label>
+                        <select id="time">
+                            <option value="30">30s</option><option value="60" selected>60s</option><option value="90">90s</option><option value="-1">&infin;</option>
+                        </select>
+                    </div>
+                </div>
+                <p class="help">Input delay: higher = smoother on high ping, more input lag</p>
+            </fieldset>
             <div class="room">
                 <div class="room-head"><span id="dot" class="dot"></span><strong>Room</strong></div>
                 <div id="room-status" class="room-status">Connecting...</div>
@@ -34,6 +54,7 @@
         <div class="topbar">
             <span>vs <strong id="opp">...</strong></span>
             <span>Ping <strong id="ping">-</strong></span>
+            <span id="match" class="match hidden"></span>
             <span id="desync" class="chip hidden"></span>
             <button id="btn-leave-game">Leave match</button>
         </div>
