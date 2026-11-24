@@ -87,6 +87,18 @@ goto :EOF
 echo SHELL_Pc 打包成功！
 goto :EOF
 
+:PACKAGE_WEB_START
+echo 正在组装 SHELL_Web（out\web）...
+goto :EOF
+
+:PACKAGE_WEB_FAIL
+echo SHELL_Web 组装失败！
+goto :EOF
+
+:PACKAGE_WEB_OK
+echo SHELL_Web 组装成功！
+goto :EOF
+
 :ASDOC_EMBED_START
 echo 正在将 ASDoc 嵌入 SWC: %~2
 goto :EOF

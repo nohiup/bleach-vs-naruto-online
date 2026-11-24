@@ -87,6 +87,18 @@ goto :EOF
 echo SHELL_Pc のパッケージが完了しました！
 goto :EOF
 
+:PACKAGE_WEB_START
+echo SHELL_Web (out\web) を作成中...
+goto :EOF
+
+:PACKAGE_WEB_FAIL
+echo SHELL_Web の作成に失敗しました！
+goto :EOF
+
+:PACKAGE_WEB_OK
+echo SHELL_Web の作成が完了しました！
+goto :EOF
+
 :ASDOC_EMBED_START
 echo SWC に ASDoc を埋め込んでいます: %~2
 goto :EOF

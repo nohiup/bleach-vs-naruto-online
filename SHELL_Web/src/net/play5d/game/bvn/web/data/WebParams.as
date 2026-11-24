@@ -1,0 +1,129 @@
+/*
+ * Copyright (C) 2021-2026, 5DPLAY Game Studio
+ * All rights reserved.
+ *
+ * This program is free software: you can redistribute it and/or modify
+ * it under the terms of the GNU General Public License as published by
+ * the Free Software Foundation, either version 3 of the License, or
+ * (at your option) any later version.
+ *
+ * This program is distributed in the hope that it will be useful,
+ * but WITHOUT ANY WARRANTY; without even the implied warranty of
+ * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+ * GNU General Public License for more details.
+ *
+ * You should have received a copy of the GNU General Public License
+ * along with this program.  If not, see <http://www.gnu.org/licenses/>.
+ */
+
+package net.play5d.game.bvn.web.data {
+
+/**
+ * 页面通过 FlashVars 传入的联机参数。
+ *
+ * <p>参数名：<code>web</code>、<code>role</code>、<code>token</code>、<code>nick</code>、
+ * <code>relayHost</code>、<code>relayPort</code>；另有可选 <code>mode</code>（<code>team</code> 为小队对战，
+ * 其余为单人对战）。未带 <code>web=1</code> 时 <code>web</code> 为 <code>false</code>，壳按离线模式运行。</p>
+ *
+ * @example
+ * <listing version="3.0">
+ * WebParams.I.read(loaderInfo.parameters);
+ * trace(WebParams.I.role);
+ * </listing>
+ */
+public class WebParams {
+    /**
+     * 角色：房主。
+     * @default host
+     */
+    public static const ROLE_HOST:String = 'host';
+    /**
+     * 角色：客户端。
+     * @default client
+     */
+    public static const ROLE_CLIENT:String = 'client';
+
+    /** @private */
+    private static var _i:WebParams;
+
+    /**
+     * 单例。
+     * @return 参数实例。
+     */
+    public static function get I():WebParams {
+        _i ||= new WebParams();
+        return _i;
+    }
+
+    /**
+     * 是否联机模式（<code>web=1</code>）。
+     * @default false
+     */
+    public var web:Boolean = false;
+    /**
+     * 角色，<code>host</code> 或 <code>client</code>。
+     * @default host
+     */
+    public var role:String = ROLE_HOST;
+    /**
+     * 大厅发放的席位 token。
+     * @default ''
+     */
+    public var token:String = '';
+    /**
+     * 玩家昵称。
+     * @default ''
+     */
+    public var nick:String = '';
+    /**
+     * 中继主机名。
+     * @default bvn-game
+     */
+    public var relayHost:String = 'bvn-game';
+    /**
+     * 中继端口。
+     * @default 17511
+     */
+    public var relayPort:int = 17511;
+    /**
+     * 对战模式：<code>team</code> 或 <code>single</code>。
+     * @default single
+     */
+    public var mode:String = 'single';
+
+    /**
+     * 读取 FlashVars。
+     * @param params <code>loaderInfo.parameters</code>。
+     * @example
+     * <listing version="3.0">
+     * WebParams.I.read(loaderInfo.parameters);
+     * </listing>
+     */
+    public function read(params:Object):void {
+        if (!params) {
+            return;
+        }
+
+        web = params['web'] == '1' || params['web'] == 'true';
+
+        if (params['role'] == ROLE_CLIENT) {
+            role = ROLE_CLIENT;
+        }
+        if (params['token']) {
+            token = String(params['token']);
+        }
+        if (params['nick']) {
+            nick = String(params['nick']);
+        }
+        if (params['relayHost']) {
+            relayHost = String(params['relayHost']);
+        }
+        if (params['relayPort']) {
+            relayPort = int(params['relayPort']);
+        }
+        if (params['mode']) {
+            mode = String(params['mode']);
+        }
+    }
+}
+}

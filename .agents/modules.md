@@ -30,6 +30,7 @@
 | `shared` | 共享 SWC 等构建产物/接口落点 | 与 Shared 编译相关 |
 | `SHELL_Dev` | 开发用壳 / Application | 本地跑、调试入口侧 |
 | `SHELL_Pc` | PC 发行壳 | |
+| `SHELL_Web` | 浏览器壳（普通 Flash Player / Ruffle，**无 AIR API**），经中继 WebSocket 联机 1v1 | 线协议见 `tools/relay/PROTOCOL.md`；包 `net.play5d.game.bvn.web`；产物 `out/web/` |
 | `SHELL_Mob` | 移动端壳 | |
 | `tools` | 脚本与工具 | bat → [`bat_script.md`](bat_script.md)；jsfl → [`jsfl.md`](jsfl.md) |
 | `keysign` | 签名相关 | |
