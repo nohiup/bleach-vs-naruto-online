@@ -18,6 +18,8 @@
 
 package net.play5d.game.bvn.ctrler.lan {
 import net.play5d.game.bvn.ctrler.game_ctrls.GameCtrl;
+import net.play5d.game.bvn.data.lan.LanNetConfig;
+import net.play5d.game.bvn.data.lan.LanSocketMsgFactory;
 import net.play5d.game.bvn.data.lan.LanSyncType;
 import net.play5d.game.bvn.data.vos.GameRunDataVO;
 import net.play5d.game.bvn.events.GameEvent;
@@ -79,13 +81,14 @@ public class LanServerSyncCore {
     }
 
     private function onGameStart(e:GameEvent):void {
-        //SYNC,type,round
+        //SYNC,type,inputDelay
+        LANUtils.updateParams();
         if (_lockFrame) {
             _lockFrame.enabled = true;
             _lockFrame.reset();
         }
         if (_sendTCP != null) {
-            _sendTCP(['SYNC', LanSyncType.GAME_START]);
+            _sendTCP(LanSocketMsgFactory.createSyncGameStart(LanNetConfig.inputDelay));
         }
     }
 

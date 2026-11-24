@@ -23,6 +23,7 @@ import flash.utils.setTimeout;
 
 import net.play5d.game.bvn.MainGame;
 import net.play5d.game.bvn.ctrler.game_ctrls.GameCtrl;
+import net.play5d.game.bvn.data.lan.LanNetConfig;
 import net.play5d.game.bvn.data.lan.LanSyncType;
 import net.play5d.game.bvn.fighter.FighterMain;
 import net.play5d.kyo.utils.KyoTimeout;
@@ -43,6 +44,15 @@ public class LanClientSyncCore {
     public function LanClientSyncCore(delayBiasMs:int = 100) {
         _delayBiasMs = delayBiasMs;
     }
+
+    /**
+     * 回合结算 HP 与主机不一致时回调，签名
+     * <code>Function(round:int, localP1:int, remoteP1:int, localP2:int, remoteP2:int):void</code>。
+     *
+     * <p>主机 SYNC 经 TCP 到达时本机模拟可能仍落后至多一个输入延迟，
+     * 故不一致仅表示「疑似失同步」，壳可结合多次出现再提示。</p>
+     */
+    public var onDesync:Function;
 
     /** @private */
     private var _lockFrame:LockFrameClientLogic;
@@ -91,6 +101,7 @@ public class LanClientSyncCore {
         _lockFrame      = null;
         _onFatalError   = null;
         _delayText      = null;
+        onDesync        = null;
         _delayCache     = [];
         _syncErrorTimes = 0;
     }
@@ -182,6 +193,11 @@ public class LanClientSyncCore {
         var type:int = arr[1];
         switch (type) {
         case LanSyncType.GAME_START:
+            if (arr.length > 2) {
+                // 采用主机下发的输入延迟，须与主机锁帧间隔一致
+                LanNetConfig.inputDelay = int(arr[2]);
+                LANUtils.updateParams();
+            }
             syncStartGame();
             break;
         case LanSyncType.ROUND_FINISH:
@@ -250,6 +266,7 @@ public class LanClientSyncCore {
 
             var p1:FighterMain = GameCtrl.I.gameRunData.p1FighterGroup.currentFighter;
             var p2:FighterMain = GameCtrl.I.gameRunData.p2FighterGroup.currentFighter;
+            checkDesync(round, p1, p2, p1hp, p2hp);
             p1.hp              = p1hp;
             p2.hp              = p2hp;
 
@@ -283,6 +300,24 @@ public class LanClientSyncCore {
             syncError(true);
             clearTimeout(_syncRoundInt);
             _syncRoundInt = setTimeout(syncRoundFinish, 500, arr);
+        }
+    }
+
+    /** @private 对比本机与主机的回合结算 HP，不一致时打日志并回调 */
+    private function checkDesync(round:int, p1:FighterMain, p2:FighterMain, p1hp:int, p2hp:int):void {
+        var localP1:int = p1.hp << 0;
+        var localP2:int = p2.hp << 0;
+        if (localP1 == p1hp && localP2 == p2hp) {
+            return;
+        }
+
+        trace(
+                'LAN DESYNC round=' + round
+                + ' p1hp local=' + localP1 + ' host=' + p1hp
+                + ' p2hp local=' + localP2 + ' host=' + p2hp
+        );
+        if (onDesync != null) {
+            onDesync(round, localP1, p1hp, localP2, p2hp);
         }
     }
 
