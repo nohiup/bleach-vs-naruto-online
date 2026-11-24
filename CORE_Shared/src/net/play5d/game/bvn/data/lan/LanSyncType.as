@@ -24,7 +24,12 @@ package net.play5d.game.bvn.data.lan {
 public class LanSyncType {
     include '../../../../../../../include/ImportVersion.as';
 
-    /** 对局开始 */
+    /**
+     * 对局开始。
+     *
+     * <p>载荷 <code>['SYNC', GAME_START, inputDelay]</code>；第三项为主机输入延迟（帧），
+     * 旧版本无该项时客户端沿用本地值。</p>
+     */
     public static const GAME_START:int  = 3;
     /** 对局结束 */
     public static const GAME_FINISH:int = 4;

@@ -18,26 +18,24 @@
 
 package net.play5d.game.bvn.ctrler.lan {
 import net.play5d.game.bvn.GameConfig;
+import net.play5d.game.bvn.data.lan.LanNetConfig;
 import net.play5d.kyo.utils.KyoTimerFormat;
 
 /**
  * 局域网锁帧 / 同步间隔参数（按平台 <code>configure</code> 后随 FPS 缩放）。
  *
  * <p>默认与 PC 壳一致：<code>syncGapBase = 30 * 3</code>。移动端应在开局前调用
- * <code>configure(30 * 5, 8)</code>。</p>
+ * <code>configure(30 * 5, 8)</code>。锁帧关键帧即输入延迟，取自 <code>LanNetConfig.inputDelay</code>。</p>
  *
  * @see #configure()
  * @see #updateParams()
  */
 public class LANUtils {
-    /** @private 锁帧关键帧（基准 30FPS） */
-    private static const _LOCK_KEYFRAME:int = 3;
-
     /** @private 同步状态发送间隔基准帧数 */
     private static var _syncGapBase:int = 30 * 3;
 
     /** 当前锁帧关键帧（已按 FPS 缩放） */
-    public static var LOCK_KEYFRAME:int = _LOCK_KEYFRAME;
+    public static var LOCK_KEYFRAME:int = LanNetConfig.inputDelay;
     /** 当前同步间隔（已按 FPS 缩放） */
     public static var SYNC_GAP:int      = _syncGapBase;
 
@@ -55,16 +53,17 @@ public class LANUtils {
     public static function configure(syncGapBase:int, inputKey:int = 0):void {
         _syncGapBase = syncGapBase;
         INPUT_KEY    = inputKey;
-        LOCK_KEYFRAME = _LOCK_KEYFRAME;
+        LOCK_KEYFRAME = LanNetConfig.inputDelay;
         SYNC_GAP      = _syncGapBase;
     }
 
     /**
-     * 按当前 <code>GameConfig.FPS_GAME</code> 相对 30FPS 缩放锁帧参数。
+     * 按当前 <code>GameConfig.FPS_GAME</code> 相对 30FPS 缩放锁帧参数；
+     * 锁帧关键帧基准取当前 <code>LanNetConfig.inputDelay</code>。
      */
     public static function updateParams():void {
         var rate:Number = GameConfig.FPS_GAME / 30;
-        LOCK_KEYFRAME   = _LOCK_KEYFRAME * rate;
+        LOCK_KEYFRAME   = LanNetConfig.inputDelay * rate;
         SYNC_GAP        = _syncGapBase * rate;
     }
 

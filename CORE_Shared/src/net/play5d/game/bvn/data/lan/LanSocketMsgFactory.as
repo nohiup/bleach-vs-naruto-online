@@ -135,17 +135,34 @@ public class LanSocketMsgFactory {
 
     /**
      * 创建「开始游戏」消息。
-     * @return 含 <code>type=START_GAME</code> 的消息对象。
+     * @param inputDelay 主机输入延迟（帧）；小于 1 时不携带该字段。
+     * @return 含 <code>type=START_GAME</code> 的消息对象，可选 <code>inputDelay</code>。
      * @example
      * <listing version="3.0">
-     * LanSocketMsgFactory.createStartGame();
+     * LanSocketMsgFactory.createStartGame(LanNetConfig.inputDelay);
      * </listing>
      */
-    public static function createStartGame():Object {
+    public static function createStartGame(inputDelay:int = 0):Object {
         var msg:Object = {};
         msg.type       = LanMsgType.START_GAME;
+        if (inputDelay > 0) {
+            msg.inputDelay = inputDelay;
+        }
 
         return msg;
+    }
+
+    /**
+     * 创建「对局开始」SYNC 数组消息。
+     * @param inputDelay 主机输入延迟（帧）。
+     * @return <code>['SYNC', LanSyncType.GAME_START, inputDelay]</code>。
+     * @example
+     * <listing version="3.0">
+     * sendTCP(LanSocketMsgFactory.createSyncGameStart(LanNetConfig.inputDelay));
+     * </listing>
+     */
+    public static function createSyncGameStart(inputDelay:int):Array {
+        return ['SYNC', LanSyncType.GAME_START, inputDelay];
     }
 }
 }

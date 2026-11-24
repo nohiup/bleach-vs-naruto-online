@@ -22,6 +22,7 @@ import flash.utils.getTimer;
 
 import net.play5d.game.bvn.ctrler.game_ctrls.GameCtrl;
 import net.play5d.game.bvn.data.lan.LanMsgType;
+import net.play5d.game.bvn.data.lan.LanNetConfig;
 import net.play5d.game.bvn.interfaces.lan.ILanClientLockLink;
 import net.play5d.game.bvn.interfaces.lan.ILanSocketInput;
 import net.play5d.game.bvn.ctrler.lan.LANUtils;
@@ -45,6 +46,17 @@ public class LockFrameClientLogic {
      * @default true
      */
     public var enabled:Boolean = true;
+
+    /**
+     * 卡顿监视；壳可设置其 <code>onStall</code> / <code>onResume</code> / <code>onTimeout</code>。
+     */
+    public var stallMonitor:LanStallMonitor = new LanStallMonitor();
+
+    /**
+     * 卡顿超过 <code>LanNetConfig.STALL_TIMEOUT_MS</code> 时是否经 <code>ILanClientLockLink.syncError(false)</code> 触发致命错误；壳自行处理 <code>onTimeout</code> 时可置 <code>false</code>。
+     * @default true
+     */
+    public var fatalOnStallTimeout:Boolean = true;
 
     /** @private */
     private var _updateCache:Object = {};
@@ -97,12 +109,14 @@ public class LockFrameClientLogic {
         _serverNextFrame = 0;
         _lastSendK       = 0;
         _sendStartFrame  = 0;
+        stallMonitor.reset();
     }
 
     /**
      * 释放缓存引用。
      */
     public function dispose():void {
+        stallMonitor.dispose();
         _updateCache = {};
         _link        = null;
         _inputP1     = null;
@@ -182,6 +196,19 @@ public class LockFrameClientLogic {
      * @return 是否允许本帧游戏逻辑推进。
      */
     public function render():Boolean {
+        var go:Boolean = renderFrame();
+        stallMonitor.update(!go);
+        if (fatalOnStallTimeout && _link && stallMonitor.stallMs >= LanNetConfig.STALL_TIMEOUT_MS) {
+            stallMonitor.reset();
+            trace('LockFrameClientLogic: stall timeout, give up');
+            _link.syncError(false);
+        }
+
+        return go;
+    }
+
+    /** @private */
+    private function renderFrame():Boolean {
         if (!enabled) {
             return true;
         }

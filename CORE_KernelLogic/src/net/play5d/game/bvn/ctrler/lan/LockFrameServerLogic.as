@@ -49,6 +49,11 @@ public class LockFrameServerLogic {
      */
     public var enabled:Boolean = true;
 
+    /**
+     * 卡顿监视；壳可设置其 <code>onStall</code> / <code>onResume</code> / <code>onTimeout</code>。
+     */
+    public var stallMonitor:LanStallMonitor = new LanStallMonitor();
+
     /** @private */
     private var _clientFrame:int;
     /** @private */
@@ -98,12 +103,14 @@ public class LockFrameServerLogic {
         _serverK         = 0;
         _syncUpdateArr   = null;
         _sendUpdateFrame = 0;
+        stallMonitor.reset();
     }
 
     /**
      * 释放引用。
      */
     public function dispose():void {
+        stallMonitor.dispose();
         _link    = null;
         _inputP1 = null;
         _inputP2 = null;
@@ -114,6 +121,14 @@ public class LockFrameServerLogic {
      * @return 是否允许本帧游戏逻辑推进。
      */
     public function render():Boolean {
+        var go:Boolean = renderFrame();
+        stallMonitor.update(!go);
+
+        return go;
+    }
+
+    /** @private */
+    private function renderFrame():Boolean {
         if (!enabled) {
             return true;
         }
