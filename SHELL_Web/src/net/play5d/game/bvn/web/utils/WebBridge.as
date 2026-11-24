@@ -23,7 +23,7 @@ import flash.external.ExternalInterface;
  * 与大厅页面的 JS 桥（<code>ExternalInterface</code>），所有调用均在不可用或抛错时静默失败。
  *
  * <p>事件通过页面全局函数 <code>bvnOnEvent(name, json)</code> 上报；页面可调用已注册的
- * <code>bvnLeave()</code> 让 SWF 主动退出对局。</p>
+ * <code>bvnLeave()</code> 让 SWF 主动退出对局，房主可在开局前调用 <code>bvnSetSettings(json)</code> 更新对局设置。</p>
  *
  * @example
  * <listing version="3.0">
@@ -42,6 +42,11 @@ public class WebBridge {
      * @default bvnLeave
      */
     public static const LEAVE_FUNC:String = 'bvnLeave';
+    /**
+     * SWF 向页面注册的房主设置更新回调名。
+     * @default bvnSetSettings
+     */
+    public static const SETTINGS_FUNC:String = 'bvnSetSettings';
 
     /**
      * 向页面上报事件。
@@ -85,6 +90,27 @@ public class WebBridge {
         }
         catch (e:Error) {
             trace('WebBridge.registerLeave', e);
+        }
+    }
+
+    /**
+     * 注册页面可调用的房主设置更新回调 <code>bvnSetSettings(json)</code>。
+     * @param handler 接收 JSON 字符串的回调。
+     * @example
+     * <listing version="3.0">
+     * WebBridge.registerSettings(onSettings);
+     * </listing>
+     */
+    public static function registerSettings(handler:Function):void {
+        if (!ExternalInterface.available) {
+            return;
+        }
+
+        try {
+            ExternalInterface.addCallback(SETTINGS_FUNC, handler);
+        }
+        catch (e:Error) {
+            trace('WebBridge.registerSettings', e);
         }
     }
 

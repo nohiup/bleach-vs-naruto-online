@@ -152,6 +152,18 @@ public class WebParams {
     }
 
     /**
+     * 校验输入延迟，非法值回落给定值。
+     * @param value 待校验值。
+     * @param fallback 非法时使用的值。
+     * @return 合法的输入延迟（1–6）。
+     */
+    public static function normalizeDelay(value:*, fallback:int):int {
+        var n:Number = Number(value);
+
+        return n == int(n) && n >= 1 && n <= 6 ? int(n) : fallback;
+    }
+
+    /**
      * 读取 FlashVars。
      * @param params <code>loaderInfo.parameters</code>。
      * @example
