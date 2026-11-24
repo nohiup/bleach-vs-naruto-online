@@ -47,6 +47,11 @@ public class SelecterItemUI {
 
     public var enabled:Boolean = true;
 
+    /**
+     * 是否为联机对端的选人器：只能由收到的 SELECT 消息驱动，本机任何输入（键盘 / 鼠标 / 触屏）都不可操作。
+     */
+    public var remote:Boolean = false;
+
     public var randoms:Vector.<FighterVO> = null;
     public var randFrame:int;
 
@@ -59,6 +64,28 @@ public class SelecterItemUI {
      */
     public function selectFinish():Boolean {
         return selectTimes >= selectTimesCount;
+    }
+
+    /**
+     * 当前步骤已确认的角色（或援助）id 列表，按确认顺序排列。
+     * @return 角色步骤最多 3 个，援助步骤最多 1 个；未确认时为空数组。
+     */
+    public function getPickedIds():Array {
+        var ids:Array = [];
+        if (!selectVO) {
+            return ids;
+        }
+
+        if (isSelectAssist) {
+            selectVO.fuzhu && ids.push(selectVO.fuzhu);
+            return ids;
+        }
+
+        var picks:Array = [selectVO.fighter1, selectVO.fighter2, selectVO.fighter3];
+        for (var i:int = 0; i < picks.length && i < selectTimes; i++) {
+            picks[i] && ids.push(picks[i]);
+        }
+        return ids;
     }
 
     public function getCurrentSelectes():Array {
@@ -136,6 +163,10 @@ public class SelecterItemUI {
     }
 
     public function select(back:Function = null):void {
+
+        if (remote) {
+            return;
+        }
 
         if (!selectVO) {
             ThrowError(Error, GetLang('debug.error.data.selecter_item_ui.select_vo_unset'));
