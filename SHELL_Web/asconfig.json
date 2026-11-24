@@ -1,0 +1,57 @@
+{
+    /******************** SHELL_Web ********************/
+
+    // 类型：SWC 库（lib） 或 应用程序（app）
+    "type": "app",
+    // 应用配置：普通 Flash Player（浏览器 / Ruffle），非 AIR，无应用描述文件
+    "config": "flex",
+
+    // 编译器选项
+    "compilerOptions": {
+        // 构建调试版本
+        "debug": false,
+
+        // SWF 版本
+        "swf-version": 37,
+        // 是否优化
+        "optimize": true,
+        // 是否使用网络
+        "use-network": true,
+
+        /******************** 源文件路径 ********************/
+
+        // 源代码路径，用于 VSCode 代码支持提示，通常内容是和 include-sources 相同
+        "source-path": [
+            "src",
+            "../CORE_KernelLogic/global"
+        ],
+
+        /******************** 引用库路径 ********************/
+        // 库文件的三种链接方式：Merged、External 和 Include
+
+        // Merged
+        "library-path": [
+            "../out/production/CORE_KernelLogic/CORE_KernelLogic.swc",
+            "../out/production/LIB_KyoLib/LIB_KyoLib.swc",
+            "../out/production/CORE_Utils/CORE_Utils.swc",
+            "../out/production/CORE_Shared/CORE_Shared.swc"
+        ],
+        // External
+        "external-library-path": [
+            "../shared/lib/swc"
+        ],
+
+        /******************** 输出相关 ********************/
+        // 输出路径（默认使用 IDEA 的生成路径）
+        "output": "../out/production/SHELL_Web/bvn.swf"
+    },
+
+    // 主类
+    "mainClass": "WebLaunch",
+    // 资源由 tools/script/package_shell_web.bat 以 HTTP 相对路径方式组装，不随编译复制
+    "copySourcePathAssets": false,
+    // 额外参数
+    "additionalOptions":[
+        "-includes=_ALL_GLOBALS_"
+    ]
+}

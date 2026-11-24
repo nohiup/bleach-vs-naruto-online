@@ -13,6 +13,7 @@
 | 3 | `CORE_Components` **依赖** `CORE_Shared` + `LIB_KyoLib`（Merged）；**SHELL_* 不依赖**它。`build.bat` 仍编译它（供组件/XFL 消费） |
 | 4 | ASDoc embed：`LIB_KyoLib`、`CORE_Shared` 各在 **本模块 compc 成功后**（`build.bat` / VSCode）；IDEA 在 **Make 之后** 一次跑 `embed_asdoc_libs.bat` |
 | 5 | 改依赖顺序时同步三处：`tools/script/build.bat` 的 `LIB_MODULES`、`.vscode/tasks.json`、本文 |
+| 6 | `SHELL_Web`（浏览器壳，非 AIR）位于 `CORE_Utils` 之后，与 `SHELL_Pc` 并列：`mxmlc +configname=flex`（普通 Flash Player 目标，**不用** `amxmlc`/AIR 描述文件），产物 `out/production/SHELL_Web/bvn.swf`；再由 `package_shell_web.bat` 组装 `out/web/`（`bvn.swf` + `assets/`，排除 AIR 专用 `mods/`）。不依赖 `sync` |
 
 ## NEVER
 
@@ -41,6 +42,7 @@ sync.bat / shared assets ──────────────────�
 | `CORE_KernelLogic` | merge `LIB_KyoLib` + `CORE_Shared` |
 | `CORE_Utils` | merge `LIB_KyoLib` + `CORE_KernelLogic` |
 | `SHELL_*` | merge KernelLogic + KyoLib + Utils + Shared（+ Dev 本地 `lib/swc`） |
+| `SHELL_Web` | 同上四库，external `shared/lib/swc`；无 AIR 库 |
 
 ---
 
@@ -54,7 +56,7 @@ sync.bat / shared assets ──────────────────�
 | CORE_Components | ✓（依赖 KyoLib+Shared） | ✓ 独立 task（depends KyoLib+Shared） | ✓ 若模块在工程内 |
 | KernelLogic / Utils | ✓ | ✓ | ✓ Make |
 | sync | 库后、壳前 | 壳 task 末依赖 | **Make 前** SyncAssets |
-| SHELL | amxmlc Dev + amxmlc Pc + `package_shell_pc.bat` | asconfig Dev / Pc；Pc 发行用 `SHELL_Pc: package Windows captive runtime`（SDK `adt -target bundle`）→ `out/production/SHELL_Pc/launch` | Make |
+| SHELL | amxmlc Dev + amxmlc Pc + `package_shell_pc.bat` + mxmlc Web + `package_shell_web.bat` | asconfig Dev / Pc / Web；Pc 发行用 `SHELL_Pc: package Windows captive runtime`（SDK `adt -target bundle`）→ `out/production/SHELL_Pc/launch`；Web 用 `SHELL_Web: assemble out/web` → `out/web/` | Make |
 
 ---
 

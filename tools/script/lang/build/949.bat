@@ -87,6 +87,18 @@ goto :EOF
 echo SHELL_Pc 패키징 성공!
 goto :EOF
 
+:PACKAGE_WEB_START
+echo SHELL_Web (out\web) 조립 중...
+goto :EOF
+
+:PACKAGE_WEB_FAIL
+echo SHELL_Web 조립 실패!
+goto :EOF
+
+:PACKAGE_WEB_OK
+echo SHELL_Web 조립 성공!
+goto :EOF
+
 :ASDOC_EMBED_START
 echo SWC에 ASDoc 삽입 중: %~2
 goto :EOF

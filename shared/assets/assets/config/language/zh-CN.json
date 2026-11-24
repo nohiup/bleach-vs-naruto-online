@@ -161,7 +161,8 @@
       "joystick_set"      : "手柄设置",
       "display_mode"      : "显示模式",
       "display_fullscreen": "全屏",
-      "display_window"    : "窗口"
+      "display_window"    : "窗口",
+      "web_leave"         : "返回大厅"
     },
     "set_screen_btn_view"   : {
       "preinstall" : "预置位置",
@@ -214,6 +215,12 @@
     "lan_room_state"        : {
       "password"       : "密码： {password}",
       "start_countdown": "{sec}秒后开始游戏"
+    },
+    "web_session_ctrl"      : {
+      "connecting"   : "正在连接联机服务器……",
+      "waiting_peer" : "等待对手加入……",
+      "waiting_ready": "对手已加入，正在准备对战……",
+      "left"         : "已离开对战，请返回大厅"
     }
   },
 

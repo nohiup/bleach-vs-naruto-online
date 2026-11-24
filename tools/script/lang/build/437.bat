@@ -87,6 +87,18 @@ goto :EOF
 echo SHELL_Pc package completed successfully!
 goto :EOF
 
+:PACKAGE_WEB_START
+echo Assembling SHELL_Web (out\web)...
+goto :EOF
+
+:PACKAGE_WEB_FAIL
+echo SHELL_Web assemble failed!
+goto :EOF
+
+:PACKAGE_WEB_OK
+echo SHELL_Web assemble completed successfully!
+goto :EOF
+
 :ASDOC_EMBED_START
 echo Embedding ASDoc into SWC: %~2
 goto :EOF

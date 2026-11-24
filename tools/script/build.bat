@@ -37,6 +37,8 @@
 ::   LIB_Other -> LIB_KyoLib -> CORE_Shared -> CORE_KernelLogic
 ::   -> CORE_Utils -> sync.bat -> SHELL_Dev
 :: CORE_Components 一并编译（供独立组件消费；SHELL_* 不依赖）
+:: 之后依次编译 SHELL_Pc（并打包）与 SHELL_Web（mxmlc 普通 Flash Player 目标，
+:: 再由 package_shell_web.bat 组装 out\web）。
 ::
 ::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::
 
@@ -69,9 +71,12 @@ if errorlevel 1 goto END
 
 set "COMPC=%FLEX_BIN%\compc.bat"
 set "AMXMLC=%FLEX_BIN%\amxmlc.bat"
+set "MXMLC=%FLEX_BIN%\mxmlc.bat"
 call "%FUNC_COMMON%" EXIST "%COMPC%"
 if errorlevel 1 goto END
 call "%FUNC_COMMON%" EXIST "%AMXMLC%"
+if errorlevel 1 goto END
+call "%FUNC_COMMON%" EXIST "%MXMLC%"
 if errorlevel 1 goto END
 
 :: 库模块共用：将 Flex/AIR/MX 标为 external
@@ -94,10 +99,13 @@ set "MOD_DEV=%REPO_ROOT%\SHELL_Dev"
 set "OUT_DEV=%OUT_ROOT%\SHELL_Dev"
 set "MOD_PC=%REPO_ROOT%\SHELL_Pc"
 set "OUT_PC=%OUT_ROOT%\SHELL_Pc"
+set "MOD_WEB=%REPO_ROOT%\SHELL_Web"
+set "OUT_WEB=%OUT_ROOT%\SHELL_Web"
 
 set "SHARED_DIR=%REPO_ROOT%\shared"
 set "SYNC_BAT=%BAT_HOME%sync.bat"
 set "PACKAGE_PC_BAT=%BAT_HOME%package_shell_pc.bat"
+set "PACKAGE_WEB_BAT=%BAT_HOME%package_shell_web.bat"
 set "FLEX_CFG=flex-config.xml"
 
 :: 库模块编译顺序（含 CORE_Components；VSCode SHELL_Dev 链可跳过 Components）
@@ -118,6 +126,10 @@ set "OUT_ICON=%OUT_DEV%\icon"
 set "PC_MAIN_AS=%MOD_PC%\src\launch.as"
 set "PC_CFG=%MOD_PC%\%FLEX_CFG%"
 
+:: SHELL_Web 源文件与配置路径
+set "WEB_MAIN_AS=%MOD_WEB%\src\WebLaunch.as"
+set "WEB_CFG=%MOD_WEB%\%FLEX_CFG%"
+
 call "%FUNC_COMMON%" EXIST "%MOD_DEV%"
 if errorlevel 1 goto END
 call "%FUNC_COMMON%" EXIST "%MOD_PC%"
@@ -128,10 +140,15 @@ call "%FUNC_COMMON%" EXIST "%SYNC_BAT%"
 if errorlevel 1 goto END
 call "%FUNC_COMMON%" EXIST "%PACKAGE_PC_BAT%"
 if errorlevel 1 goto END
+call "%FUNC_COMMON%" EXIST "%MOD_WEB%"
+if errorlevel 1 goto END
+call "%FUNC_COMMON%" EXIST "%PACKAGE_WEB_BAT%"
+if errorlevel 1 goto END
 
 :: 确保各模块输出目录存在（compc / amxmlc 写入 out\production）
 if not exist "%OUT_DEV%" mkdir "%OUT_DEV%"
 if not exist "%OUT_PC%" mkdir "%OUT_PC%"
+if not exist "%OUT_WEB%" mkdir "%OUT_WEB%"
 for %%M in (%LIB_MODULES%) do (
 	if not exist "%OUT_ROOT%\%%M" mkdir "%OUT_ROOT%\%%M"
 )
@@ -236,6 +253,35 @@ if errorlevel 1 (
 	goto END
 )
 call "%FUNC_COMMON%" ECHO_LANG :PACKAGE_PC_OK ""
+
+::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::
+:: 9) 编译 SHELL_Web（mxmlc / 普通 Flash Player，非 AIR）
+::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::
+
+call "%FUNC_COMMON%" EXIST "%WEB_CFG%"
+if errorlevel 1 goto END
+call "%FUNC_COMMON%" EXIST "%WEB_MAIN_AS%"
+if errorlevel 1 goto END
+
+call "%FUNC_COMMON%" ECHO_LANG :COMPILE_START "SHELL_Web"
+call "%MXMLC%" +configname=flex -load-config+="%WEB_CFG%" "%WEB_MAIN_AS%"
+if errorlevel 1 (
+	call "%FUNC_COMMON%" ECHO_LANG :COMPILE_FAIL "SHELL_Web"
+	goto END
+)
+call "%FUNC_COMMON%" ECHO_LANG :COMPILE_OK "SHELL_Web"
+
+::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::
+:: 10) 组装 SHELL_Web（out\web：bvn.swf + assets）
+::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::
+
+call "%FUNC_COMMON%" ECHO_LANG :PACKAGE_WEB_START ""
+call "%PACKAGE_WEB_BAT%"
+if errorlevel 1 (
+	call "%FUNC_COMMON%" ECHO_LANG :PACKAGE_WEB_FAIL ""
+	goto END
+)
+call "%FUNC_COMMON%" ECHO_LANG :PACKAGE_WEB_OK ""
 
 ::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::
 

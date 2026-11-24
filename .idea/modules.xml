@@ -12,6 +12,7 @@
       <module fileurl="file://$PROJECT_DIR$/SHELL_Dev/SHELL_Dev.iml" filepath="$PROJECT_DIR$/SHELL_Dev/SHELL_Dev.iml" />
       <module fileurl="file://$PROJECT_DIR$/SHELL_Mob/SHELL_Mob.iml" filepath="$PROJECT_DIR$/SHELL_Mob/SHELL_Mob.iml" />
       <module fileurl="file://$PROJECT_DIR$/SHELL_Pc/SHELL_Pc.iml" filepath="$PROJECT_DIR$/SHELL_Pc/SHELL_Pc.iml" />
+      <module fileurl="file://$PROJECT_DIR$/SHELL_Web/SHELL_Web.iml" filepath="$PROJECT_DIR$/SHELL_Web/SHELL_Web.iml" />
     </modules>
   </component>
 </project>

@@ -28,6 +28,7 @@
         // SHELL_* 依赖链（与 build.bat 最小链一致，不含 CORE_Components）：
         //   LIB_Other -> LIB_KyoLib(+embed) -> CORE_Shared(+embed)
         //   -> CORE_KernelLogic -> CORE_Utils -> SyncAssets -> SHELL_*
+        // SHELL_Web 不依赖 SyncAssets（素材由 package_shell_web.bat 直接取自 shared/assets）
         // CORE_Components 独立 task：LIB_KyoLib + CORE_Shared -> Components
 
         // SHELL_Dev
@@ -82,6 +83,42 @@
             "dependsOrder"  : "sequence",
             "dependsOn"     : [
                 "ActionScript: compile release - SHELL_Pc/asconfig.json"
+            ]
+        },
+
+        // SHELL_Web：浏览器壳（普通 Flash Player / Ruffle，非 AIR）→ out/production/SHELL_Web/bvn.swf
+        {
+            "label"         : "ActionScript: compile release - SHELL_Web/asconfig.json",
+            "type"          : "actionscript",
+            "debug"         : false,
+            "asconfig"      : "SHELL_Web/asconfig.json",
+            "group"         : "build",
+            "problemMatcher": [],
+            "dependsOrder"  : "sequence",
+            "dependsOn"     : [
+                "ActionScript: compile debug - LIB_KyoLib/asconfig.json",
+                "ActionScript: compile debug - CORE_Shared/asconfig.json",
+                "ActionScript: compile debug - CORE_KernelLogic/asconfig.json",
+                "ActionScript: compile debug - CORE_Utils/asconfig.json"
+            ]
+        },
+        // SHELL_Web：组装 out/web（bvn.swf + assets），先编译再执行 package_shell_web.bat
+        {
+            "label"         : "SHELL_Web: assemble out/web",
+            "type"          : "shell",
+            "command"       : "\"${workspaceFolder}\\tools\\script\\package_shell_web.bat\"",
+            "options"       : {
+                "cwd"       : "${workspaceFolder}\\tools\\script",
+                "shell"     : {
+                    "executable": "cmd.exe",
+                    "args"     : ["/d", "/c"]
+                }
+            },
+            "group"         : "build",
+            "problemMatcher": [],
+            "dependsOrder"  : "sequence",
+            "dependsOn"     : [
+                "ActionScript: compile release - SHELL_Web/asconfig.json"
             ]
         },
 
