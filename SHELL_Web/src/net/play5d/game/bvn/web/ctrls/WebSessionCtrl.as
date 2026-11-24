@@ -76,7 +76,7 @@ import net.play5d.game.bvn.web.views.WebWaitState;
 public class WebSessionCtrl {
     /** @private 会话内就绪握手消息类型 */
     private static const MSG_READY:String = 'WEB_READY';
-    /** @private 房主下发对局设置（生命 / 时间）的会话消息类型 */
+    /** @private 房主下发对局设置（生命 / 时间 / 输入延迟）的会话消息类型 */
     private static const MSG_SETTINGS:String = 'WEB_SETTINGS';
     /** @private stall 事件最小上报间隔（毫秒） */
     private static const STALL_EMIT_MS:int = 250;
@@ -123,6 +123,10 @@ public class WebSessionCtrl {
     private var _matchHp:Number = WebParams.HP_DEFAULT;
     /** @private 本场对局回合时间 */
     private var _matchTime:int = WebParams.TIME_DEFAULT;
+    /** @private 本场对局输入延迟（帧） */
+    private var _matchDelay:int = 3;
+    /** @private 房主是否已下发 <code>WEB_SETTINGS</code>（此后不再接受页面更新） */
+    private var _settingsSent:Boolean;
     /** @private 是否已覆盖玩家本地的生命 / 时间设置 */
     private var _settingsApplied:Boolean;
     /** @private 玩家原有的生命比例 */
@@ -194,6 +198,7 @@ public class WebSessionCtrl {
         if (_isHost) {
             _matchHp          = p.hp;
             _matchTime        = p.time;
+            _matchDelay       = p.inputDelay;
             _settingsReceived = true;
         }
 
@@ -208,6 +213,7 @@ public class WebSessionCtrl {
         _link.onError     = onLinkError;
 
         WebBridge.registerLeave(leave);
+        WebBridge.registerSettings(setSettings);
 
         _link.connect(p.relayHost, p.relayPort, p.token);
     }
@@ -234,6 +240,46 @@ public class WebSessionCtrl {
      */
     public function leave():void {
         finish('leave');
+    }
+
+    /**
+     * 页面更新房主对局设置（<code>bvnSetSettings</code>）：仅房主且尚未下发 <code>WEB_SETTINGS</code> 时生效，
+     * 各字段独立校验，非法字段保留当前值。
+     * @param json <code>{"hp":num,"time":int,"inputDelay":int}</code> 的 JSON 字符串，字段可缺省。
+     * @example
+     * <listing version="3.0">
+     * WebSessionCtrl.I.setSettings('{"hp":2,"time":90,"inputDelay":4}');
+     * </listing>
+     */
+    public function setSettings(json:String):void {
+        if (!_isHost || _settingsSent || _left) {
+            trace('WebSessionCtrl: bvnSetSettings ignored host=' + _isHost + ' sent=' + _settingsSent);
+            WebBridge.log('bvnSetSettings ignored');
+
+            return;
+        }
+
+        var o:Object;
+        try {
+            o = JSON.parse(json);
+        }
+        catch (e:Error) {
+            trace('WebSessionCtrl: bvnSetSettings bad json', e);
+
+            return;
+        }
+
+        if (!o) {
+            return;
+        }
+
+        if (WebParams.HP_OPTIONS.indexOf(Number(o.hp)) >= 0) {
+            _matchHp = Number(o.hp);
+        }
+        if (WebParams.TIME_OPTIONS.indexOf(Number(o.time)) >= 0) {
+            _matchTime = int(o.time);
+        }
+        _matchDelay = WebParams.normalizeDelay(o.inputDelay, _matchDelay);
     }
 
     /** @private 发送会话消息（TCP 等价） */
@@ -300,6 +346,7 @@ public class WebSessionCtrl {
             if (!_isHost && !_settingsReceived) {
                 _matchHp          = WebParams.normalizeHp(data.hp);
                 _matchTime        = WebParams.normalizeTime(data.time);
+                _matchDelay       = WebParams.normalizeDelay(data.inputDelay, _matchDelay);
                 _settingsReceived = true;
                 tryStart();
             }
@@ -359,7 +406,8 @@ public class WebSessionCtrl {
         _localReady = true;
 
         if (_isHost) {
-            sendSession({type: MSG_SETTINGS, hp: _matchHp, time: _matchTime});
+            _settingsSent = true;
+            sendSession({type: MSG_SETTINGS, hp: _matchHp, time: _matchTime, inputDelay: _matchDelay});
         }
 
         sendSession({type: MSG_READY});
@@ -415,7 +463,7 @@ public class WebSessionCtrl {
         cfg.fighterHP = _matchHp;
         cfg.fightTime = _matchTime;
 
-        WebBridge.emit('matchSettings', {hp: _matchHp, time: _matchTime});
+        WebBridge.emit('matchSettings', {hp: _matchHp, time: _matchTime, inputDelay: _matchDelay});
     }
 
     /** @private 还原玩家原有的生命 / 时间设置 */
@@ -434,7 +482,7 @@ public class WebSessionCtrl {
     private function startHost():void {
         GameInterface.instance.updateInputConfig();
         LockFrameLogic.I.initServer(renderHost);
-        LanNetConfig.inputDelay = WebParams.I.inputDelay;
+        LanNetConfig.inputDelay = _matchDelay;
         LANUtils.updateParams();
 
         _selectServer = new SelectFighterServerLogic();
