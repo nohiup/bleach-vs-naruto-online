@@ -37,6 +37,8 @@ public class SelectFighterDataType {
     public static const INDEX:int          = 4;
     /** 出战顺序完成 */
     public static const INDEX_FINISH:int   = 5;
+    /** 客户端出战资源加载完成（客户端 → 服务端，<code>[KEY, LOAD_DONE]</code>） */
+    public static const LOAD_DONE:int      = 6;
 
 }
 }

@@ -50,12 +50,21 @@ public class LoadingStage implements IStage {
     private var _loadFin:Boolean;
     private var _selectIndexUI:SelectIndexUI;
     private var _gameFinished:Boolean;
+    private var _assetsLoaded:Boolean;
 
     /**
      * 显示对象
      */
     public function get display():DisplayObject {
         return _ui;
+    }
+
+    /**
+     * 出战资源是否已加载完毕（不含界面收尾的延时）。
+     * @return 加载完毕为 <code>true</code>。
+     */
+    public function get assetsLoaded():Boolean {
+        return _assetsLoaded;
     }
 
     public function p1SelectFinish():Boolean {
@@ -169,6 +178,8 @@ public class LoadingStage implements IStage {
 
     private function onLoadFinish():void {
 //			trace('loadFin');
+        _assetsLoaded = true;
+        GameEvent.dispatchEvent(GameEvent.FIGHT_ASSETS_LOADED);
 
         TweenLite.to(_sltUI, 1, {
             y: 80, onComplete: function ():void {

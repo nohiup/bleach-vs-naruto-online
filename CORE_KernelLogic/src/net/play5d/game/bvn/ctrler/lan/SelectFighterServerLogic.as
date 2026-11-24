@@ -30,7 +30,12 @@ import net.play5d.game.bvn.stage.SelectFighterStage;
 /**
  * 局域网选人服务端逻辑（汇总双方选择并推进步骤）。
  *
+ * <p>开战握手：客户端的选人 / 出战顺序消息先进入待处理队列，场景就绪后再应用；
+ * 仅当服务端自身加载完成、客户端已发 <code>LOAD_DONE</code> 且双方出战顺序都已确定时，
+ * 才发送 <code>INDEX_FINISH</code> 并进入战斗。</p>
+ *
  * @see SelectFighterClientLogic
+ * @see SelectFighterPendingQueue
  */
 public class SelectFighterServerLogic {
     /**
@@ -41,6 +46,12 @@ public class SelectFighterServerLogic {
     private var _timeout:int;
     /** @private 发送 TCP 回调，签名 <code>function(data:Object):void</code> */
     private var _sendTCP:Function;
+    /** @private 待处理的客户端消息 */
+    private var _queue:SelectFighterPendingQueue;
+    /** @private 客户端是否已完成出战资源加载 */
+    private var _clientLoaded:Boolean;
+    /** @private 本轮是否已安排开战 */
+    private var _fightScheduled:Boolean;
 
     /**
      * 注册事件并禁用自动收尾。
@@ -48,12 +59,15 @@ public class SelectFighterServerLogic {
      */
     public function init(sendTCP:Function):void {
         _sendTCP = sendTCP;
+        _queue   = new SelectFighterPendingQueue(applySelect);
 
         SelectFighterSyncPayload.disableAutoFinish();
 
         GameEvent.addEventListener(GameEvent.SELECT_FIGHTER_STEP, onSelectStep);
         GameEvent.addEventListener(GameEvent.SELECT_FIGHTER_FINISH, onSelectFinish);
         GameEvent.addEventListener(GameEvent.SELECT_FIGHTER_INDEX, onSelectFighterIndex);
+        GameEvent.addEventListener(GameEvent.FIGHT_ASSETS_LOADED, onAssetsLoaded);
+        GameEvent.addEventListener(GameEvent.ENTER_STAGE, onEnterStage);
     }
 
     /**
@@ -63,6 +77,14 @@ public class SelectFighterServerLogic {
         GameEvent.removeEventListener(GameEvent.SELECT_FIGHTER_STEP, onSelectStep);
         GameEvent.removeEventListener(GameEvent.SELECT_FIGHTER_FINISH, onSelectFinish);
         GameEvent.removeEventListener(GameEvent.SELECT_FIGHTER_INDEX, onSelectFighterIndex);
+        GameEvent.removeEventListener(GameEvent.FIGHT_ASSETS_LOADED, onAssetsLoaded);
+        GameEvent.removeEventListener(GameEvent.ENTER_STAGE, onEnterStage);
+
+        clearTimeout(_timeout);
+        if (_queue) {
+            _queue.clear();
+            _queue = null;
+        }
         _sendTCP = null;
     }
 
@@ -77,26 +99,43 @@ public class SelectFighterServerLogic {
             return false;
         }
 
-        var type:int = data[1];
-
-        switch (type) {
+        switch (int(arr[1])) {
         case SelectFighterDataType.SELECT:
-            try {
-                var stg:SelectFighterStage = MainGame.stageCtrl.currentStage as SelectFighterStage;
-                stg.setSelect(2, arr[2]);
-                checkSelectFinish();
-            }
-            catch (e:Error) {
+        case SelectFighterDataType.INDEX:
+            if (_queue) {
+                _queue.push(arr);
             }
             break;
+        case SelectFighterDataType.LOAD_DONE:
+            _clientLoaded = true;
+            tryStartFight();
+            break;
+        }
+
+        return true;
+    }
+
+    /**
+     * @private
+     * 应用一条客户端消息；场景未就绪返回 <code>false</code> 以便稍后重试。
+     */
+    private function applySelect(arr:Array):Boolean {
+        switch (int(arr[1])) {
+        case SelectFighterDataType.SELECT:
+            var stg:SelectFighterStage = MainGame.stageCtrl.currentStage as SelectFighterStage;
+            if (!stg) {
+                return false;
+            }
+            stg.setSelect(2, arr[2]);
+            checkSelectFinish();
+            break;
         case SelectFighterDataType.INDEX:
-            try {
-                var stg2:LoadingStage = MainGame.stageCtrl.currentStage as LoadingStage;
-                stg2.setOrder(2, data[2]);
-                checkSelectIndexFinish();
+            var stg2:LoadingStage = MainGame.stageCtrl.currentStage as LoadingStage;
+            if (!stg2) {
+                return false;
             }
-            catch (e:Error) {
-            }
+            stg2.setOrder(2, arr[2]);
+            tryStartFight();
             break;
         }
 
@@ -106,30 +145,44 @@ public class SelectFighterServerLogic {
     /** @private */
     private function checkSelectFinish():void {
         var stg:SelectFighterStage = MainGame.stageCtrl.currentStage as SelectFighterStage;
-        if (stg.p1SelectFinish && stg.p2SelectFinish) {
+        if (stg && stg.p1SelectFinish && stg.p2SelectFinish) {
             clearTimeout(_timeout);
             _timeout = setTimeout(function ():void {
+                if (_sendTCP == null) {
+                    return;
+                }
                 _sendTCP([SelectFighterDataType.KEY, SelectFighterDataType.NEXT_STEP]);
                 stg.nextStep();
             }, 1000);
         }
     }
 
-    /** @private */
-    private function checkSelectIndexFinish():void {
-        try {
-            var stg:LoadingStage = MainGame.stageCtrl.currentStage as LoadingStage;
-            if (stg.selectFinish()) {
-                setTimeout(function ():void {
-                    var orders:Array = stg.getSort();
+    /**
+     * @private
+     * 服务端加载完成、客户端加载完成、双方顺序确定三者齐备时开战（每轮只触发一次）。
+     */
+    private function tryStartFight():void {
+        if (_fightScheduled) {
+            return;
+        }
 
-                    _sendTCP([SelectFighterDataType.KEY, SelectFighterDataType.INDEX_FINISH, orders[0], orders[1]]);
-                    stg.gotoGame(orders[0], orders[1]);
-                }, 1000);
+        var stg:LoadingStage = MainGame.stageCtrl.currentStage as LoadingStage;
+        if (!stg || !stg.assetsLoaded || !_clientLoaded || !stg.selectFinish()) {
+            return;
+        }
+
+        _fightScheduled = true;
+
+        setTimeout(function ():void {
+            if (_sendTCP == null || MainGame.stageCtrl.currentStage != stg) {
+                return;
             }
-        }
-        catch (e:Error) {
-        }
+
+            var orders:Array = stg.getSort();
+
+            _sendTCP([SelectFighterDataType.KEY, SelectFighterDataType.INDEX_FINISH, orders[0], orders[1]]);
+            stg.gotoGame(orders[0], orders[1]);
+        }, 1000);
     }
 
     /** @private */
@@ -145,13 +198,34 @@ public class SelectFighterServerLogic {
         ));
 
         var stg:SelectFighterStage = MainGame.stageCtrl.currentStage as SelectFighterStage;
-        stg.goLoadGame();
+        if (stg) {
+            stg.goLoadGame();
+        }
     }
 
     /** @private */
     private function onSelectFighterIndex(e:GameEvent):void {
         _sendTCP([SelectFighterDataType.KEY, SelectFighterDataType.INDEX, e.param]);
-        checkSelectIndexFinish();
+        tryStartFight();
+    }
+
+    /** @private 本机出战资源加载完成 */
+    private function onAssetsLoaded(e:GameEvent):void {
+        tryStartFight();
+    }
+
+    /** @private 进入新场景：清理过期消息、重置回合状态并重试待处理消息 */
+    private function onEnterStage(e:GameEvent):void {
+        if (e.param == SelectFighterStage) {
+            _clientLoaded   = false;
+            _fightScheduled = false;
+            _queue.dropLeading([SelectFighterDataType.INDEX]);
+        }
+        else if (e.param == LoadingStage) {
+            _queue.dropLeading([SelectFighterDataType.SELECT]);
+        }
+
+        _queue.flush();
     }
 }
 }
