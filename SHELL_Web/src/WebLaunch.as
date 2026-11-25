@@ -40,6 +40,7 @@ import net.play5d.game.bvn.web.ctrls.WebSessionCtrl;
 import net.play5d.game.bvn.web.data.WebParams;
 import net.play5d.game.bvn.web.utils.WebBridge;
 import net.play5d.game.bvn.web.utils.WebLoger;
+import net.play5d.game.bvn.web.views.WebFpsView;
 
 /**
  * 浏览器（Flash Player / Ruffle，非 AIR）入口。
@@ -67,6 +68,8 @@ public class WebLaunch extends Sprite {
     private var _mainGame:MainGame;
     /** @private */
     private var _assetLoader:AssetLoader = new AssetLoader();
+    /** @private */
+    private var _fpsView:WebFpsView;
 
     /** @private */
     private function initialize(e:Event = null):void {
@@ -77,6 +80,10 @@ public class WebLaunch extends Sprite {
         STAGE = stage;
 
         WebParams.I.read(loaderInfo.parameters);
+
+        _fpsView = new WebFpsView(stage);
+        _fpsView.toggle(WebParams.I.showFps);
+        WebBridge.registerFps(_fpsView.toggle);
 
         ResUtils.swfLib = new SwfLib();
         AssetManager.I.setAssetLoader(_assetLoader);
@@ -143,6 +150,10 @@ public class WebLaunch extends Sprite {
     private function keyDownHandler(e:KeyboardEvent):void {
         if (e.keyCode == Keyboard.ESCAPE) {
             e.preventDefault();
+        }
+        else if (e.keyCode == Keyboard.F3) {
+            e.preventDefault();
+            _fpsView.toggle();
         }
     }
 }

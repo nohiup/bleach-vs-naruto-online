@@ -61,9 +61,11 @@ import net.play5d.game.bvn.web.views.WebWaitState;
  * 跳过 UDP 发现与主机列表。游戏资源加载完成且收到 <code>PEER_READY</code> 后，双方互发
  * <code>WEB_READY</code> 会话消息，都就绪才同时开始，避免一方尚未建好选人逻辑时丢包。</p>
  *
- * <p>对局正常结束（回到主菜单）上报 <code>matchEnd</code> 并关闭中继连接；对手离开、连接断开、卡顿超时、
- * 同步错误或页面调用 <code>bvnLeave</code> 上报 <code>disconnected</code>。卡顿经 <code>stall</code> / <code>resume</code>
- * 上报，失同步经 <code>desync</code> 上报（不中断对局）。</p>
+ * <p>一局正常结束只上报 <code>matchEnd</code>，会话保持：游戏沿用 LAN 流程回到选人，可用同一套对局设置再战；
+ * 房主下发的生命 / 时间在会话期间每次进入选人 / 对战场景都会重新套用，仅在会话真正结束时还原玩家本地设置。
+ * 对手离开、连接断开、卡顿超时、同步错误、页面调用 <code>bvnLeave</code> 或中途回到主菜单上报
+ * <code>disconnected</code>。卡顿经 <code>stall</code> / <code>resume</code> 上报，失同步经 <code>desync</code>
+ * 上报（不中断对局）。</p>
  *
  * @example
  * <listing version="3.0">
@@ -445,13 +447,16 @@ public class WebSessionCtrl {
             GameMode.currentMode = GameMode.SINGLE_VS_PEOPLE;
         }
 
-        applySettings();
+        applySettings(true);
 
         MainGame.I.goSelect();
     }
 
-    /** @private 保存玩家原设置并套用本场生命 / 时间，随后上报 <code>matchSettings</code> */
-    private function applySettings():void {
+    /**
+     * @private 保存玩家原设置（仅首次）并套用会话的生命 / 时间；每场对局进入选人 / 对战前都会重新调用，
+     * 防止被其他流程改回；<code>emit</code> 为 <code>true</code> 时上报 <code>matchSettings</code>
+     */
+    private function applySettings(emit:Boolean):void {
         var cfg:ConfigVO = GameData.I.config;
 
         if (!_settingsApplied) {
@@ -463,7 +468,13 @@ public class WebSessionCtrl {
         cfg.fighterHP = _matchHp;
         cfg.fightTime = _matchTime;
 
-        WebBridge.emit('matchSettings', {hp: _matchHp, time: _matchTime, inputDelay: _matchDelay});
+        if (_isHost) {
+            LanNetConfig.inputDelay = _matchDelay;
+        }
+
+        if (emit) {
+            WebBridge.emit('matchSettings', {hp: _matchHp, time: _matchTime, inputDelay: _matchDelay});
+        }
     }
 
     /** @private 还原玩家原有的生命 / 时间设置 */
@@ -667,14 +678,21 @@ public class WebSessionCtrl {
         }
     }
 
-    /** @private 对局结束后回到主菜单即视为本局会话完成 */
+    /** @private 进入选人 / 加载 / 对战场景时重新套用会话设置；会话中途回到主菜单视为离开 */
     private function onEnterStage(e:GameEvent):void {
-        if (active && e.param == MenuStage) {
-            finish('match_over', false);
+        if (!active) {
+            return;
+        }
+
+        if (e.param == SelectFighterStage || e.param == LoadingStage || e.param == GameStage) {
+            applySettings(false);
+        }
+        else if (e.param == MenuStage) {
+            finish('leave');
         }
     }
 
-    /** @private 结束会话：释放对战资源、关闭连接并显示等待界面；<code>notify</code> 为 <code>false</code>（正常结束）时不发 <code>disconnected</code> */
+    /** @private 结束会话：释放对战资源、还原玩家本地设置、关闭连接并显示等待界面；<code>notify</code> 为 <code>false</code> 时不发 <code>disconnected</code> */
     private function finish(reason:String, notify:Boolean = true):void {
         if (_left) {
             return;

@@ -29,6 +29,8 @@
     var player = null;
     var ruffleLoading = null;
     var desyncTimer = null;
+    var noticeTimer = null;
+    var wins = { host: 0, client: 0 };
     var REASONS = { peer_left: "Opponent left", socket_close: "Connection lost", stall_timeout: "Opponent not responding", leave: "You left" };
     // QUIET_RUFFLE_LOG: drop Ruffle's harmless "tag_utils.rs" lines (thousands of them); all other output is kept
     function quietRuffle() {
@@ -46,6 +48,23 @@
     }
     function hideStall() { $("stall").classList.add("hidden"); }
     function hideDesync() { clearTimeout(desyncTimer); $("desync").classList.add("hidden"); }
+    function hideNotice() { clearTimeout(noticeTimer); $("notice").classList.add("hidden"); }
+    function showNotice(text) {
+        clearTimeout(noticeTimer);
+        $("notice").textContent = text;
+        $("notice").classList.remove("hidden");
+        noticeTimer = setTimeout(hideNotice, 4000);
+    }
+    function renderScore() {
+        $("score").textContent = "Host " + wins.host + " \u2013 " + wins.client + " Client";
+        $("score").classList.remove("hidden");
+    }
+    function hideScore() { $("score").textContent = ""; $("score").classList.add("hidden"); }
+    function fpsOn() { return storeGet("bvn.fps") === "1"; }
+    function setFps(on) {
+        storeSet("bvn.fps", on ? "1" : "0");
+        try { if (player && typeof player.bvnToggleFps === "function") player.bvnToggleFps(on); } catch (e) { }
+    }
     function showScreen(name) {
         screens.forEach(function (s) { $("screen-" + s).classList.toggle("hidden", s !== name); });
     }
@@ -240,6 +259,10 @@
         $("invite").value = location.href;
         hideStall();
         hideDesync();
+        hideNotice();
+        hideScore();
+        wins = { host: 0, client: 0 };
+        $("chk-fps").checked = fpsOn();
         hideMatch();
         $("overlay").classList.toggle("hidden", seat.role !== "host");
         $("ov-msg").textContent = "";
@@ -251,6 +274,7 @@
         loadRuffle().then(function () {
             if (seat !== mine) return;
             var params = { web: "1", role: mine.role, token: mine.token, nick: mine.nick, relayHost: "bvn-game", relayPort: "17511" };
+            if (fpsOn()) params.showFps = "1";
             if (mine.role === "host") {
                 params.inputDelay = String(mine.settings.inputDelay);
                 params.hp = String(mine.settings.hp);
@@ -297,6 +321,8 @@
         destroyPlayer();
         hideStall();
         hideDesync();
+        hideNotice();
+        hideScore();
         hideMatch();
         $("ended-msg").textContent = text;
         showScreen("ended");
@@ -307,6 +333,8 @@
         destroyPlayer();
         hideStall();
         hideDesync();
+        hideNotice();
+        hideScore();
         hideMatch();
         setMsg(typeof text === "string" ? text : "");
         showScreen("lobby");
@@ -346,7 +374,12 @@
                 if (typeof data.rtt === "number") $("ping").textContent = Math.round(data.rtt) + " ms";
                 break;
             case "matchEnd":
-                leave("Match finished");
+                // the session stays open: the game returns to character select for the next match
+                if (data.winner === "host" || data.winner === "client") wins[data.winner]++;
+                renderScore();
+                hideStall();
+                showNotice("Match finished \u2014 next match");
+                focusPlayer();
                 break;
             case "stall":
                 $("stall").textContent = "Waiting for opponent\u2026 " + (Math.max(0, Number(data.ms) || 0) / 1000).toFixed(1) + "s";
@@ -375,6 +408,7 @@
     $("btn-leave-wait").addEventListener("click", function () { leave(); });
     $("btn-back").addEventListener("click", function () { showScreen("lobby"); renderRoom(); });
     $("btn-copy").addEventListener("click", copyInvite);
+    $("chk-fps").addEventListener("change", function () { setFps($("chk-fps").checked); focusPlayer(); });
     $("nick").addEventListener("keydown", function (e) { if (e.key === "Enter") onJoin(); });
     $("pass").addEventListener("keydown", function (e) { if (e.key === "Enter") onJoin(); });
     $("player-box").addEventListener("click", focusPlayer);
