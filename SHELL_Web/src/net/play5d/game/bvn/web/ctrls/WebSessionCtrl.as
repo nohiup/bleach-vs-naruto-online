@@ -236,6 +236,7 @@ public class WebSessionCtrl {
         _link.onClose     = onLinkClosed;
         _link.onSession   = onSession;
         _link.onTickFrame = onTickFrame;
+        _link.onInput     = onSnapshot;
         _link.onRtt       = onRtt;
         _link.onError     = onLinkError;
 
@@ -403,6 +404,14 @@ public class WebSessionCtrl {
     }
 
     /** @private 中继节拍帧：两端对称交给锁帧逻辑 */
+    /** @private 客户端：房主位置快照（INPUT 帧，type 2）交给中继锁帧逻辑按帧号延后应用 */
+    private function onSnapshot(bytes:ByteArray):void {
+        if (!_isHost && _relayLogic) {
+            _relayLogic.receiveSyncUpdate(bytes);
+        }
+    }
+
+    /** @private */
     private function onTickFrame(payload:ByteArray):void {
         if (_relayLogic) {
             _relayLogic.receiveTickFrame(payload);
@@ -518,6 +527,7 @@ public class WebSessionCtrl {
         _selectServer.init(sendSession);
 
         createRelayLogic();
+        _relayLogic.snapshotSender = sendSnapshot;
 
         LanGameMenuCtrl.I.init(createExitDialog());
 
@@ -547,6 +557,7 @@ public class WebSessionCtrl {
         _clientSync.bind(_relayLogic, onSyncFatalError, _delayText);
         _clientSync.onDesync = onDesync;
         _link.syncCore = _clientSync;
+        _relayLogic.syncCore = _clientSync;
 
         GameCtrl.I.autoEndRoundAble    = false;
         GameCtrl.I.autoStartAble       = false;
@@ -574,6 +585,13 @@ public class WebSessionCtrl {
                 leave,
                 leave
         );
+    }
+
+    /** @private 房主：经 INPUT 帧（type 2）把位置快照发给客户端 */
+    private function sendSnapshot(snap:ByteArray):void {
+        if (_link) {
+            _link.sendUDP(snap);
+        }
     }
 
     /** @private 创建两端对称的中继节拍锁帧逻辑并绑定卡顿回调 */
