@@ -80,6 +80,13 @@ public class LockFrameRelayLogic implements ILanLockFrame {
      */
     public var snapshotSender:Function;
 
+    /**
+     * 失步检测回调，签名 <code>function(epoch:uint, frame:uint, hash:uint, detail:String):void</code>。
+     * 战斗段内每推进 <code>LanNetConfig.HASH_INTERVAL</code> 帧，在该帧模拟完成后
+     * （即下一次 <code>render</code> 入口、尚未推进下一帧前）双方同点各调用一次；为 null 时不计算。
+     */
+    public var onStateHash:Function;
+
     /** @private */
     private var _link:ILanRelayLockLink;
     /** @private */
@@ -110,6 +117,8 @@ public class LockFrameRelayLogic implements ILanLockFrame {
     private var _finishFn:Function;
     /** @private */
     private var _finishFrame:int = -1;
+    /** @private 已上报过哈希的帧号 */
+    private var _hashedFrame:int;
 
     /**
      * 注入会话与输入通道，并开始监听战斗段事件。
@@ -163,6 +172,13 @@ public class LockFrameRelayLogic implements ILanLockFrame {
     }
 
     /**
+     * 当前战斗段序号（每个回合 / 新对局递增，新对局清零）。
+     */
+    public function get epoch():uint {
+        return _epoch;
+    }
+
+    /**
      * 抖动缓冲中尚未播放的帧数（可供壳显示）。
      */
     public function get bufferedFrames():int {
@@ -198,6 +214,7 @@ public class LockFrameRelayLogic implements ILanLockFrame {
         _finishFn      = null;
         syncCore       = null;
         snapshotSender = null;
+        onStateHash    = null;
         _link          = null;
         _local         = null;
         _inputP1       = null;
@@ -271,6 +288,7 @@ public class LockFrameRelayLogic implements ILanLockFrame {
             return true;
         }
 
+        reportStateHash();
         sendLocalInput();
 
         if (_finishFn != null && _frame >= _finishFrame) {
@@ -308,6 +326,32 @@ public class LockFrameRelayLogic implements ILanLockFrame {
         _inputP2.setSocketData(pair[1]);
 
         return true;
+    }
+
+    /**
+     * @private 已推进到间隔帧且该帧已模拟完成时上报状态哈希（只读，每段每间隔帧仅一次）。
+     * 在下一帧推进之前调用：此时无论 ENTER_FRAME 监听顺序如何，该帧模拟均已完成。
+     */
+    private function reportStateHash():void {
+        if (onStateHash == null || _frame <= 0 || _frame == _hashedFrame || _frame % LanNetConfig.HASH_INTERVAL != 0) {
+            return;
+        }
+
+        _hashedFrame = _frame;
+
+        var runData:GameRunDataVO = GameCtrl.I.gameRunData;
+        var curStg:IStage         = MainGame.stageCtrl.currentStage;
+        if (!runData || !(curStg is GameStage)) {
+            return;
+        }
+
+        try {
+            var hash:uint = LanStateHash.compute(runData);
+            onStateHash(_epoch, _frame, hash, LanStateHash.detail);
+        }
+        catch (e:Error) {
+            trace(e);
+        }
     }
 
     /** @private 采样本机输入并上报给中继 */
@@ -391,6 +435,8 @@ public class LockFrameRelayLogic implements ILanLockFrame {
         _syncCount   = 0;
         _finishFn    = null;
         _finishFrame = -1;
+        _hashedFrame = 0;
+        GameCtrl.I.resetAnimatePhase();
         _active      = true;
         stallMonitor.reset();
 

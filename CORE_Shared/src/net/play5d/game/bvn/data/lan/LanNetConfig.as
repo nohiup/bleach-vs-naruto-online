@@ -74,6 +74,9 @@ public class LanNetConfig {
      */
     public static var relayPaced:Boolean = false;
 
+    /** 中继定帧状态哈希上报间隔（帧）；双方每隔该帧数在模拟完成后各上报一次，用于失步检测 */
+    public static const HASH_INTERVAL:int = 30;
+
     /** 中继定帧抖动缓冲默认帧数 */
     public static const RELAY_BUFFER_DEFAULT:int = 3;
     /**
