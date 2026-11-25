@@ -523,6 +523,8 @@ public class WebSessionCtrl {
 
     /** @private 房主：对齐 LANServerCtrl.gameStart */
     private function startHost():void {
+        // 公网高延迟：房主按自身节奏推进，不等待客户端回报帧（见 LanNetConfig.hostPaced）
+        LanNetConfig.hostPaced = true;
         GameInterface.instance.updateInputConfig();
         LockFrameLogic.I.initServer(renderHost);
         LanNetConfig.inputDelay = _matchDelay;
@@ -543,6 +545,8 @@ public class WebSessionCtrl {
 
     /** @private 客户端：对齐 LANClientCtrl.gameStart */
     private function startClient():void {
+        // 与房主一致：客户端以缓冲区播放房主帧流（见 LanNetConfig.hostPaced）
+        LanNetConfig.hostPaced = true;
         _delayText                   = new TextField();
         _delayText.text              = '0ms';
         var tf:TextFormat            = new TextFormat();
@@ -768,6 +772,7 @@ public class WebSessionCtrl {
         GameEvent.removeEventListener(GameEvent.ENTER_STAGE, onEnterStage);
         GameEvent.removeEventListener(GameEvent.ROUND_START, onRoundStart);
 
+        LanNetConfig.hostPaced = false;
         _roundStarted = false;
         _stallEmitted = false;
 
