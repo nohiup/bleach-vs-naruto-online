@@ -39,13 +39,16 @@ import net.play5d.kyo.stage.IStage;
  * P1 / P2 输入通道，双方因此逐帧输入一致、模拟一致。每次 <code>render</code> 向中继上报
  * 本机输入与已推进帧号。缓冲耗尽则停顿并重新缓冲，不做追帧（逻辑不可在同一 ENTER_FRAME 内重复步进）。</p>
  *
- * <p>战斗段（一回合）生命周期由本类监听 <code>GameEvent</code> 自行驱动：
- * <code>GAME_START</code>（序号清零后）与 <code>ROUND_START</code> 发送 <code>CMD_START</code>
- * 并清空帧缓冲，<code>ROUND_END</code> / <code>GAME_END</code> 发送 <code>CMD_STOP</code>；
- * 战斗段之外 <code>render</code> 恒返回 <code>true</code>（自由播放结算动画）。</p>
+ * <p>战斗段（整场对局）生命周期由本类监听 <code>GameEvent</code> 自行驱动：
+ * <code>GAME_START</code>（<code>GameCtrl.doStartGame</code> 内，对战构建完成后、首次渲染注册之前）
+ * 序号递增、清空帧缓冲并发送 <code>CMD_START</code>；回合之间不停止、不重启，
+ * 开场、KO、回合切换动画全部随中继帧推进；<code>GAME_END</code>（终局结算完成、离开对战场景前）
+ * 或 <code>dispose</code> 发送 <code>CMD_STOP</code>。战斗段内首帧到达前 <code>render</code> 返回
+ * <code>false</code>（双方画面冻结在同一状态），无自由播放。</p>
  *
  * <p>房主（<code>localIsP1</code>）仍经 <code>LanServerSyncCore</code> 下发 SYNC 消息，并以中继帧号为准：
- * 回合 / 结束消息经 <code>runAtFrame</code> 延后到客户端播放至同一帧；状态快照由房主按帧号
+ * 回合 / 结束消息经 <code>runAtFrame</code> 延后到客户端播放至同一帧（双方确定性模拟时通常已各自结算，
+ * 该消息仅作兜底）；状态快照由房主按帧号
  * 经 <code>snapshotSender</code> 发出，客户端经 <code>receiveSyncUpdate</code> 接收并在该帧应用。
  * 房主自身不应用快照。</p>
  *
@@ -97,7 +100,7 @@ public class LockFrameRelayLogic implements ILanLockFrame {
     private var _inputP2:GameSocketInput;
     /** @private */
     private var _localIsP1:Boolean;
-    /** @private 当前是否处于战斗段（已发送 START 且未 STOP） */
+    /** @private 当前是否处于战斗段（整场对局；已发送 START 且未 STOP） */
     private var _active:Boolean;
     /** @private */
     private var _epoch:uint;
@@ -113,10 +116,10 @@ public class LockFrameRelayLogic implements ILanLockFrame {
     private var _snaps:Object = {};
     /** @private 距上次发快照的帧数 */
     private var _syncCount:int;
-    /** @private */
-    private var _finishFn:Function;
-    /** @private */
-    private var _finishFrame:int = -1;
+    /** @private 待到帧执行的房主消息回调（按到达顺序） */
+    private var _finishFns:Array = [];
+    /** @private 与 <code>_finishFns</code> 对应的房主帧号 */
+    private var _finishFrames:Array = [];
     /** @private 已上报过哈希的帧号 */
     private var _hashedFrame:int;
 
@@ -144,8 +147,6 @@ public class LockFrameRelayLogic implements ILanLockFrame {
         _localIsP1 = localIsP1;
 
         GameEvent.addEventListener(GameEvent.GAME_START, onGameStart);
-        GameEvent.addEventListener(GameEvent.ROUND_START, onRoundStart);
-        GameEvent.addEventListener(GameEvent.ROUND_END, onRoundEnd);
         GameEvent.addEventListener(GameEvent.GAME_END, onGameEnd);
     }
 
@@ -172,7 +173,7 @@ public class LockFrameRelayLogic implements ILanLockFrame {
     }
 
     /**
-     * 当前战斗段序号（每个回合 / 新对局递增，新对局清零）。
+     * 当前战斗段序号（每场对局递增，从 1 开始；双方对局数一致故序号一致）。
      */
     public function get epoch():uint {
         return _epoch;
@@ -198,8 +199,8 @@ public class LockFrameRelayLogic implements ILanLockFrame {
             return;
         }
 
-        _finishFrame = hostFrame;
-        _finishFn    = fn;
+        _finishFrames.push(hostFrame);
+        _finishFns.push(fn);
     }
 
     /**
@@ -211,7 +212,8 @@ public class LockFrameRelayLogic implements ILanLockFrame {
         stallMonitor.dispose();
         _pairs         = {};
         _snaps         = {};
-        _finishFn      = null;
+        _finishFns     = [];
+        _finishFrames  = [];
         syncCore       = null;
         snapshotSender = null;
         onStateHash    = null;
@@ -291,18 +293,18 @@ public class LockFrameRelayLogic implements ILanLockFrame {
         reportStateHash();
         sendLocalInput();
 
-        if (_finishFn != null && _frame >= _finishFrame) {
-            var fn:Function = _finishFn;
-            _finishFn       = null;
-            _finishFrame    = -1;
-            fn();
-            endSegment();
+        // 兜底：房主消息所指帧已到而本机尚未自行结算时执行；整场对局为同一战斗段，不在此结束
+        while (_active && _finishFns.length > 0 && _frame >= _finishFrames[0]) {
+            _finishFrames.shift();
+            (_finishFns.shift() as Function)();
+        }
 
+        if (!_active) {
             return false;
         }
 
         var buffered:int = _head - _frame;
-        var need:int     = _finishFn != null ? 1 : Math.max(1, LanNetConfig.relayBufferFrames);
+        var need:int     = _finishFns.length > 0 ? 1 : Math.max(1, LanNetConfig.relayBufferFrames);
         if (buffered < 1 || (!_started && buffered < need)) {
             _started = false;
 
@@ -420,7 +422,7 @@ public class LockFrameRelayLogic implements ILanLockFrame {
         }
     }
 
-    /** @private 开始新战斗段：序号递增、清空帧缓冲并通知中继 */
+    /** @private 开始整场战斗段：序号递增、清空帧缓冲并通知中继 */
     private function beginSegment():void {
         if (!_link) {
             return;
@@ -433,8 +435,8 @@ public class LockFrameRelayLogic implements ILanLockFrame {
         _snaps       = {};
         _started     = false;
         _syncCount   = 0;
-        _finishFn    = null;
-        _finishFrame = -1;
+        _finishFns    = [];
+        _finishFrames = [];
         _hashedFrame = 0;
         GameCtrl.I.resetAnimatePhase();
         _active      = true;
@@ -449,9 +451,9 @@ public class LockFrameRelayLogic implements ILanLockFrame {
             return;
         }
 
-        _active      = false;
-        _finishFn    = null;
-        _finishFrame = -1;
+        _active       = false;
+        _finishFns    = [];
+        _finishFrames = [];
         _pairs       = {};
         _snaps       = {};
         stallMonitor.reset();
@@ -468,27 +470,13 @@ public class LockFrameRelayLogic implements ILanLockFrame {
     /** @private */
     private function removeEvents():void {
         GameEvent.removeEventListener(GameEvent.GAME_START, onGameStart);
-        GameEvent.removeEventListener(GameEvent.ROUND_START, onRoundStart);
-        GameEvent.removeEventListener(GameEvent.ROUND_END, onRoundEnd);
         GameEvent.removeEventListener(GameEvent.GAME_END, onGameEnd);
     }
 
-    /** @private 新一场对局：序号清零后开始第 1 段 */
+    /** @private 新一场对局：序号递增并开始整场战斗段（此时尚无任何动画推进） */
     private function onGameStart(e:GameEvent):void {
-        _active = false;
-        _epoch  = 0;
-        beginSegment();
-    }
-
-    /** @private */
-    private function onRoundStart(e:GameEvent):void {
-        _active = false;
-        beginSegment();
-    }
-
-    /** @private */
-    private function onRoundEnd(e:GameEvent):void {
         endSegment();
+        beginSegment();
     }
 
     /** @private */

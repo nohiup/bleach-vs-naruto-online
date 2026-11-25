@@ -117,6 +117,13 @@ public class GameCtrl {
         return _teamMap;
     }
 
+    /**
+     * 本回合是否已进入 KO / 结算（<code>GameEndCtrl</code> 运行中）。
+     */
+    public function get roundEnding():Boolean {
+        return _endCtrl != null;
+    }
+
     /** @private 供 GameRoundCtrl */
     public function get roundStartCtrl():GameStartCtrl {
         return _startCtrl;
