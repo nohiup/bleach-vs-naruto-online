@@ -17,6 +17,8 @@ export function configFromEnv(env = process.env) {
         tokenTtlMs: Number(env.TOKEN_TTL_MS) || 15000,
         idleTimeoutMs: Number(env.IDLE_TIMEOUT_MS) || 10000,
         trustProxy: env.TRUST_PROXY === '1',
+        // test only: delay every forwarded SESSION/INPUT frame by this many ms to simulate WAN latency
+        simDelayMs: Math.max(0, Number(env.SIM_DELAY_MS) || 0),
     };
 }
 
@@ -134,7 +136,10 @@ export function createRelay(overrides = {}) {
         if (frame.type === T.PING) return send(ws, encode(T.PING, frame.payload));
         if (frame.type !== T.SESSION && frame.type !== T.INPUT) return;
         const peer = room.canForward() && room.peerOf(seat);
-        if (peer) send(peer.game, encode(frame.type, frame.payload));
+        if (!peer) return;
+        const out = encode(frame.type, frame.payload);
+        if (cfg.simDelayMs > 0) setTimeout(() => send(peer.game, out), cfg.simDelayMs);
+        else send(peer.game, out);
     }
 
     function hello(ws, frame, now) {
