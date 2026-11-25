@@ -372,29 +372,45 @@ public class GameInterfaceManager implements IGameInterface {
             return;
         }
 
+        var online:Boolean = WebSessionCtrl.I.active;
+
+        // 画质上限 HIGH：HIGH_8X8 / HIGH_16X16 的 MSAA 在 Ruffle 下填充开销过大
         switch (cfg.quality) {
         case GameQuality.BEST:
-            MainGame.I.stage.quality = StageQuality.HIGH_16X16;
+        case GameQuality.HIGHER:
+        case GameQuality.HIGH:
+            MainGame.I.stage.quality = StageQuality.HIGH;
+            break;
+        case GameQuality.MEDIUM:
+            MainGame.I.stage.quality = StageQuality.MEDIUM;
+            break;
+        case GameQuality.LOW:
+            MainGame.I.stage.quality = StageQuality.LOW;
+            break;
+        }
+
+        // 联机锁帧：一帧一逻辑步，帧率与闪光设置由会话接管，不得改动（恒 30）
+        if (online) {
+            MainGame.I.setFPS(30);
+
+            return;
+        }
+
+        switch (cfg.quality) {
+        case GameQuality.BEST:
             MainGame.I.setFPS(60);
             GameConfig.FPS_SHINE_EFFECT = 60;
             break;
         case GameQuality.HIGHER:
-            MainGame.I.stage.quality = StageQuality.HIGH_8X8;
-            MainGame.I.setFPS(60);
-            GameConfig.FPS_SHINE_EFFECT = 30;
-            break;
         case GameQuality.HIGH:
-            MainGame.I.stage.quality = StageQuality.HIGH;
             MainGame.I.setFPS(60);
             GameConfig.FPS_SHINE_EFFECT = 30;
             break;
         case GameQuality.MEDIUM:
-            MainGame.I.stage.quality = StageQuality.MEDIUM;
             MainGame.I.setFPS(60);
             GameConfig.FPS_SHINE_EFFECT = 15;
             break;
         case GameQuality.LOW:
-            MainGame.I.stage.quality = StageQuality.LOW;
             MainGame.I.setFPS(30);
             GameConfig.FPS_SHINE_EFFECT = 10;
             break;
