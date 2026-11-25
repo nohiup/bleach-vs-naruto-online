@@ -5,7 +5,7 @@ import { Ticker, CMD_START, CMD_STOP } from '../src/ticker.js';
 const IV = 1000 / 30;
 
 /** Fake clock + scheduler: advance(ms) fires due timers in order, each at its own due time. */
-function harness() {
+function harness(opts = {}) {
     let t = 1000;
     let timer = null;
     const sent = [];
@@ -23,6 +23,7 @@ function harness() {
         clearTimer: () => (timer = null),
         onFrame: (b) => sent.push(parse(b)),
         onEvent: (e, f) => events.push([e, f]),
+        ...opts,
     });
     const advance = (ms) => {
         const end = t + ms;
@@ -183,4 +184,86 @@ test('input while not ticking only stores k; unknown roles ignored', () => {
     h.tk.ctrl('nobody', CMD_START, 1);
     assert.equal(h.tk.k.host, 4);
     assert.equal(h.sent.length, 0);
+});
+
+const lastN = (h) => {
+    const m = h.sent[h.sent.length - 1];
+    return m ? m.start + m.frames.length - 1 : 0;
+};
+
+test('backpressure: frames stop at minLast + maxLead', () => {
+    const h = harness({ maxLead: 5 });
+    both(h.tk);
+    h.tk.input('host', 0, 3);
+    h.tk.input('client', 0, 2);
+    h.advance(2000);
+    assert.equal(lastN(h), 7);
+    assert.equal(h.tk.frame, 7);
+});
+
+test('backpressure: resumes at 30 Hz after lastFrame advances, no burst', () => {
+    const h = harness({ maxLead: 5 });
+    both(h.tk);
+    h.advance(2000);
+    assert.equal(lastN(h), 5);
+    const count = h.sent.length;
+    h.tk.input('host', 0, 1000);
+    h.tk.input('client', 0, 1000);
+    h.advance(IV * 0.9);
+    assert.ok(h.sent.length - count <= 1, 'no burst on release');
+    h.advance(IV * 9.1);
+    const n = lastN(h) - 5;
+    assert.ok(n >= 9 && n <= 10, `30 Hz after release, got ${n}`);
+    assert.equal(h.sent.length - count, n);
+});
+
+test('backpressure: one slow seat holds both', () => {
+    const h = harness({ maxLead: 4 });
+    both(h.tk);
+    h.tk.input('host', 0, 1000);
+    h.tk.input('client', 0, 1);
+    h.advance(2000);
+    assert.equal(lastN(h), 5);
+    h.tk.input('client', 0, 3);
+    h.advance(IV * 10);
+    assert.equal(lastN(h), 7);
+});
+
+test('backpressure: lastFrame resets on new epoch', () => {
+    const h = harness({ maxLead: 5 });
+    both(h.tk, 1);
+    h.tk.input('host', 0, 50);
+    h.tk.input('client', 0, 50);
+    h.advance(1000);
+    assert.ok(lastN(h) > 20);
+    both(h.tk, 2);
+    h.sent.length = 0;
+    h.advance(2000);
+    assert.equal(lastN(h), 5);
+});
+
+test('backpressure: late timer catch-up is bounded by maxLead', () => {
+    const h = harness({ maxLead: 5 });
+    both(h.tk);
+    h.tk.input('host', 0, 100);
+    h.tk.input('client', 0, 100);
+    h.late(10 * IV + 1);
+    assert.equal(lastN(h), 10);
+    h.tk.input('host', 0, 0);
+    h.tk.input('client', 0, 0);
+    h.late(20 * IV);
+    assert.equal(lastN(h), 10);
+    h.tk.input('host', 0, 10);
+    h.tk.input('client', 0, 10);
+    h.late(20 * IV);
+    assert.equal(lastN(h), 15);
+});
+
+test('backpressure: tick_hold logged at most once per second', () => {
+    const h = harness({ maxLead: 3 });
+    both(h.tk);
+    h.advance(2500);
+    const holds = h.events.filter(([e]) => e === 'tick_hold');
+    assert.ok(holds.length >= 2 && holds.length <= 3);
+    assert.equal(holds[0][1].frame, 3);
 });

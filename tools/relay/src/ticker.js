@@ -28,7 +28,8 @@ export function encodeTickFrame(startFrame, pairs) {
  *   onEvent(name, data) optional logging hook ('tick_start' | 'tick_stop')
  */
 export class Ticker {
-    constructor({ now, setTimer, clearTimer, onFrame, onEvent = () => {} }) {
+    constructor({ now, setTimer, clearTimer, onFrame, onEvent = () => {}, maxLead = Infinity }) {
+        this.maxLead = maxLead;
         this.now = now;
         this.setTimer = setTimer;
         this.clearTimer = clearTimer;
@@ -38,6 +39,8 @@ export class Ticker {
         this.epoch = 0;
         this.frame = 0;
         this.k = { host: 0, client: 0 };
+        this.last = { host: 0, client: 0 };
+        this.lastHoldLog = -Infinity;
         this.history = [];
         this.pending = { host: 0, client: 0 };
         this.timer = null;
@@ -62,9 +65,11 @@ export class Ticker {
         if (this.pending[peer] === epoch) this.start(epoch);
     }
 
-    /** TICK_INPUT from a seat: stores the latest k (also while not ticking). */
-    input(role, k) {
-        if (role === 'host' || role === 'client') this.k[role] = k;
+    /** TICK_INPUT from a seat: stores the latest k and lastFrame (also while not ticking). */
+    input(role, k, lastFrame = 0) {
+        if (role !== 'host' && role !== 'client') return;
+        this.k[role] = k;
+        this.last[role] = lastFrame;
     }
 
     start(epoch) {
@@ -74,6 +79,8 @@ export class Ticker {
         this.frame = 0;
         this.history = [];
         this.k.host = this.k.client = 0;
+        this.last.host = this.last.client = 0;
+        this.lastHoldLog = -Infinity;
         this.t0 = this.now();
         this.onEvent('tick_start', { epoch });
         this.schedule();
@@ -93,6 +100,7 @@ export class Ticker {
         this.stop(reason);
         this.pending.host = this.pending.client = 0;
         this.k.host = this.k.client = 0;
+        this.last.host = this.last.client = 0;
     }
 
     schedule() {
@@ -106,13 +114,30 @@ export class Ticker {
         if (!this.running) return;
         const due = Math.floor((this.now() - this.t0) / INTERVAL_MS + EPS);
         const first = this.frame + 1;
+        let held = false;
         while (this.frame < due) {
+            const minLast = Math.min(this.last.host, this.last.client);
+            if (this.frame - minLast >= this.maxLead) {
+                held = true;
+                break;
+            }
             this.history.push([this.k.host, this.k.client]);
             this.frame++;
         }
+        if (held) this.hold();
         if (this.frame >= first) this.emit(first, this.frame);
         if (this.history.length > 64) this.history.splice(0, this.history.length - 64);
         this.schedule();
+    }
+
+    /** Backpressure: re-anchors the schedule so the next frame is one interval away (no catch-up burst). */
+    hold() {
+        const t = this.now();
+        this.t0 = t - this.frame * INTERVAL_MS;
+        if (t - this.lastHoldLog >= 1000) {
+            this.lastHoldLog = t;
+            this.onEvent('tick_hold', { epoch: this.epoch, frame: this.frame, host: this.last.host, client: this.last.client });
+        }
     }
 
     /** Sends frames `first..last`, each message prefixed with up to REDUNDANCY older frames. */

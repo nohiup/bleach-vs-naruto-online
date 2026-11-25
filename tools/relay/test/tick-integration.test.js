@@ -135,3 +135,21 @@ test('relay-paced: SIM_DELAY_MS delays both uplink and downlink', async () => {
     assert.ok(Date.now() - t0 >= 150, `elapsed ${Date.now() - t0}`);
     await done();
 });
+
+test('backpressure: a client that stops sending TICK_INPUT stalls frames after maxLead', async () => {
+    const { g1, g2, done } = await seated({ tickMaxLead: 6 });
+    g1.ws.send(ctrl(1, 1));
+    g2.ws.send(ctrl(1, 1));
+    const pump = setInterval(() => g1.ws.send(tickIn(newestSeen(g1), 1)), 20);
+    let seen = 0;
+    const newestSeen = () => seen;
+    const track = setInterval(() => {
+        for (const m of g1.queue) if (m.type === T.TICK_FRAME) seen = Math.max(seen, newest(m.payload).frame);
+    }, 5);
+    await sleep(700);
+    clearInterval(pump);
+    clearInterval(track);
+    for (const m of g1.queue) if (m.type === T.TICK_FRAME) seen = Math.max(seen, newest(m.payload).frame);
+    assert.equal(seen, 6);
+    await done();
+});
