@@ -70,7 +70,8 @@ public class GameRoundCtrl {
      * 推进对局计时（动画帧节拍）。
      */
     public function renderGameTime():void {
-        if (_owner.gameRunData.gameTimeMax != -1) {
+        //-1（或任何负值）为无限时，gameTime 为负时同样视为无限，避免被同步值误触发超时
+        if (_owner.gameRunData.gameTimeMax >= 0 && _owner.gameRunData.gameTime >= 0) {
             if (++_owner.roundTimeFrame > GameConfig.FPS_ANIMATE) {
                 _owner.roundTimeFrame = 0;
                 _owner.gameRunData.gameTime--;
