@@ -141,7 +141,7 @@ public class GameEndCtrl {
             var winner:FighterMain    = rundata.lastWinner;
 
             if (GameMode.isTeamMode() || GameMode.currentMode == GameMode.SURVIVOR) {
-                var timeRate:Number = rundata.gameTime == -1 ? 1 : rundata.gameTime / rundata.gameTimeMax;
+                var timeRate:Number = rundata.gameTime < 0 || rundata.gameTimeMax <= 0 ? 1 : rundata.gameTime / rundata.gameTimeMax;
                 var addHPMax:int    = winner.hpMax * 0.2;
                 var addHP:int       = addHPMax * timeRate;
                 if (addHP < winner.hpMax * 0.05) {

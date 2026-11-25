@@ -259,7 +259,7 @@ public class LanClientSyncCore {
                 return;
             }
 
-            if (isTimeOver) {
+            if (isTimeOver && GameCtrl.I.gameRunData.gameTimeMax >= 0) {
                 GameCtrl.I.gameRunData.isTimerOver = true;
                 GameCtrl.I.gameRunData.gameTime    = 0;
             }

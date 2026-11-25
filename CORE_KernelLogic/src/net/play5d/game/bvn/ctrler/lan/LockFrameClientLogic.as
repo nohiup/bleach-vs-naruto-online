@@ -175,6 +175,13 @@ public class LockFrameClientLogic {
                 return true;
             }
 
+            //房主为准：-1 为无限时，客户端同步采用，避免本地限时倒计时误触发超时
+            if (snap.gameTime < 0) {
+                GameCtrl.I.gameRunData.gameTimeMax = -1;
+            }
+            else if (GameCtrl.I.gameRunData.gameTimeMax < 0) {
+                GameCtrl.I.gameRunData.gameTimeMax = snap.gameTime;
+            }
             GameCtrl.I.gameRunData.gameTime = snap.gameTime;
             LanInputSyncCodec.applyToFighters(
                     snap,

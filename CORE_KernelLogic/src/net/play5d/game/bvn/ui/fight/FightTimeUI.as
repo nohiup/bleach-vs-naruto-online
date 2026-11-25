@@ -63,6 +63,15 @@ public class FightTimeUI {
             return;
         }
         var time:int = GameCtrl.I.gameRunData.gameTime;
+        if (time < 0) {
+            _ui.wuxian.visible = true;
+            _numMc.visible     = false;
+            return;
+        }
+        if (!_numMc.visible) {
+            _ui.wuxian.visible = false;
+            _numMc.visible     = true;
+        }
         if (time == _lastTime) {
             return;
         }
