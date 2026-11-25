@@ -587,6 +587,13 @@ public class GameCtrl {
         gameState.camera.tweenSpd = GameConfig.CAMERA_TWEEN_SPD * rate;
     }
 
+    /**
+     * 重置动画刷新相位（联机战斗段开始时调用，使双方动画推进奇偶一致）。
+     */
+    public function resetAnimatePhase():void {
+        _renderAnimateFrame = 0;
+    }
+
     public function slowResume():void {
         slowRate = 0;
         setAnimateFPS(GameConfig.FPS_ANIMATE);
