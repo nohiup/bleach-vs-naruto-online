@@ -33,6 +33,7 @@ import net.play5d.game.bvn.data.AssisterModel;
 import net.play5d.game.bvn.data.FighterModel;
 import net.play5d.game.bvn.data.GameData;
 import net.play5d.game.bvn.data.GameMode;
+import net.play5d.game.bvn.data.lan.LanNetConfig;
 import net.play5d.game.bvn.data.MapModel;
 import net.play5d.game.bvn.data.musou.MusouMissionVO;
 import net.play5d.game.bvn.data.musou.MusouModel;
@@ -653,6 +654,11 @@ public class GameCtrl {
     }
 
     private function renderPause():void {
+        // 中继节拍联机：本地暂停 / 跳过开场与结算会打破两端锁帧一致，统一禁用（退出走 LanGameMenuCtrl）
+        if (LanNetConfig.relayPaced) {
+            return;
+        }
+
         if (_startCtrl || _endCtrl) {
             if (GameInputer.back(1) || GameInputer.select(GameInputType.MENU, 1)) {
                 if (_startCtrl) {

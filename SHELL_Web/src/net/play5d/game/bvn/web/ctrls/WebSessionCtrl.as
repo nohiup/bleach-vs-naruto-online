@@ -655,7 +655,8 @@ public class WebSessionCtrl {
         _selectServer.init(sendSession);
 
         createRelayLogic();
-        _relayLogic.snapshotSender = sendSnapshot;
+        // 不发位置快照：两端由同一帧流确定性模拟，快照仅在客户端以截断整数覆盖，反而制造偏差
+        _relayLogic.snapshotSender = null;
 
         LanGameMenuCtrl.I.init(createExitDialog());
 
