@@ -253,6 +253,28 @@
         });
         return ruffleLoading;
     }
+    var perf = readPerf();
+    function readPerf() {
+        var q = new URLSearchParams(location.search);
+        function pick(k, allowed) { var v = (q.get(k) || "").toLowerCase(); return allowed.indexOf(v) >= 0 ? v : null; }
+        var renderer = pick("renderer", ["webgpu", "wgpu-webgl", "webgl", "canvas"]);
+        var quality = pick("quality", ["low", "medium", "high", "best"]);
+        var dpr = pick("dpr", ["1", "1.5", "2", "native"]);
+        // Ruffle 0.7.1 has no pixel-ratio option and reads window.devicePixelRatio for its canvas size,
+        // so cap it before Ruffle loads. Default 1: the box is <=800 CSS px, i.e. native 800x600 at 1x.
+        var cap = dpr === "native" ? 0 : Number(dpr || 1);
+        if (cap > 0) {
+            var real = window.devicePixelRatio || 1;
+            try { Object.defineProperty(window, "devicePixelRatio", { configurable: true, get: function () { return Math.min(real, cap); } }); } catch (e) { }
+        }
+        return { renderer: renderer, quality: quality || "low", dpr: dpr, override: !!(renderer || q.get("quality") || dpr) };
+    }
+    function showPerfLine() {
+        var el = $("perf-line");
+        if (!el) return;
+        el.classList.toggle("hidden", !perf.override);
+        el.textContent = "renderer: " + (perf.renderer || "auto") + " · quality: " + perf.quality + " · dpr: " + (window.devicePixelRatio || 1);
+    }
     function startGame() {
         $("ping").textContent = "-";
         $("opp").textContent = "...";
@@ -283,14 +305,22 @@
             var ruffle = window.RufflePlayer.newest();
             player = ruffle.createPlayer();
             $("player").appendChild(player);
-            player.load({
+            var cfg = {
                 url: SWF_URL,
                 autoplay: "on",
                 letterbox: "on",
                 allowScriptAccess: true,
+                quality: perf.quality,
+                maxExecutionDuration: 30,
+                logLevel: "error",
+                splashScreen: false,
+                contextMenu: "off",
                 socketProxy: [{ host: "bvn-game", port: 17511, proxyUrl: RELAY + "/game" }],
                 parameters: params
-            });
+            };
+            if (perf.renderer) cfg.preferredRenderer = perf.renderer;
+            player.load(cfg);
+            showPerfLine();
             focusPlayer();
         }).catch(function () {
             if (seat === mine) { send({ t: "leave" }); endGame("Failed to load the game"); }
