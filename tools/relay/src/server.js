@@ -2,6 +2,8 @@ import http from 'node:http';
 import { pathToFileURL } from 'node:url';
 import { WebSocketServer } from 'ws';
 import { Room } from './room.js';
+import { performance } from 'node:perf_hooks';
+import { Ticker } from './ticker.js';
 import { FrameParser, encode, T, MAX_PAYLOAD } from './frames.js';
 
 const OPEN = 1;
@@ -46,6 +48,25 @@ function rateLimiter(limit, windowMs) {
 export function createRelay(overrides = {}) {
     const cfg = { ...configFromEnv({}), ...overrides };
     const room = new Room({ password: cfg.password, tokenTtlMs: cfg.tokenTtlMs, idleTimeoutMs: cfg.idleTimeoutMs });
+    const delayed = new Set();
+    const later = (fn) => {
+        if (cfg.simDelayMs <= 0) return fn();
+        const t = setTimeout(() => {
+            delayed.delete(t);
+            fn();
+        }, cfg.simDelayMs);
+        delayed.add(t);
+    };
+    const ticker = new Ticker({
+        now: () => performance.now(),
+        setTimer: (fn, ms) => setTimeout(fn, ms),
+        clearTimer: (h) => clearTimeout(h),
+        onFrame: (payload) => {
+            const out = encode(T.TICK_FRAME, payload);
+            later(() => room.seats.forEach((s) => send(s.game, out)));
+        },
+        onEvent: (event, fields) => log(event, fields),
+    });
     const lobbies = new Set();
     const ipCounts = new Map();
     if (!cfg.allowedOrigins.length) log('warn', { msg: 'ALLOWED_ORIGIN unset, allowing all origins' });
@@ -68,6 +89,7 @@ export function createRelay(overrides = {}) {
     /** Resets the room because `initiator` left or timed out; notifies and closes the other side. */
     function resetRoom(reason, initiator) {
         if (!room.seats.includes(initiator)) return;
+        ticker.reset('room_reset');
         const seats = room.reset();
         log('reset', { reason, by: initiator.role, nick: initiator.nick });
         for (const seat of seats) {
@@ -134,12 +156,27 @@ export function createRelay(overrides = {}) {
         const seat = ws.seat;
         room.touch(seat, now);
         if (frame.type === T.PING) return send(ws, encode(T.PING, frame.payload));
+        if (frame.type === T.TICK_CTRL || frame.type === T.TICK_INPUT) return onTick(seat, frame);
         if (frame.type !== T.SESSION && frame.type !== T.INPUT) return;
         const peer = room.canForward() && room.peerOf(seat);
         if (!peer) return;
         const out = encode(frame.type, frame.payload);
         if (cfg.simDelayMs > 0) setTimeout(() => send(peer.game, out), cfg.simDelayMs);
         else send(peer.game, out);
+    }
+
+    /** Types 6/7: consumed by the ticker, never forwarded. Processing is delayed by SIM_DELAY_MS like the uplink. */
+    function onTick(seat, frame) {
+        const p = frame.payload;
+        const isCtrl = frame.type === T.TICK_CTRL;
+        if (p.length !== (isCtrl ? 5 : 6) || !room.ready) return;
+        const a = isCtrl ? p.readUInt8(0) : p.readUInt32BE(0);
+        const b = isCtrl ? p.readUInt32BE(1) : p.readInt16BE(4);
+        later(() => {
+            if (!room.seats.includes(seat) || !room.ready) return;
+            if (isCtrl) ticker.ctrl(seat.role, a, b);
+            else ticker.input(seat.role, b);
+        });
     }
 
     function hello(ws, frame, now) {
@@ -262,11 +299,14 @@ export function createRelay(overrides = {}) {
 
     function close() {
         clearInterval(timer);
+        ticker.reset('shutdown');
+        delayed.forEach(clearTimeout);
+        delayed.clear();
         [...lobbyWss.clients, ...gameWss.clients].forEach((ws) => ws.terminate());
         return new Promise((resolve) => server.close(() => resolve()));
     }
 
-    return { server, room, listen, close };
+    return { server, room, ticker, listen, close };
 }
 
 if (process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href) {

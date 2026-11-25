@@ -1,4 +1,4 @@
-export const T = { HELLO: 0, SESSION: 1, INPUT: 2, PING: 3, PEER_LEFT: 4, PEER_READY: 5 };
+export const T = { HELLO: 0, SESSION: 1, INPUT: 2, PING: 3, PEER_LEFT: 4, PEER_READY: 5, TICK_CTRL: 6, TICK_INPUT: 7, TICK_FRAME: 8 };
 export const MAX_PAYLOAD = 4096;
 const HEADER = 3;
 
