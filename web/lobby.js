@@ -419,8 +419,13 @@
                 hideStall();
                 break;
             case "desync":
-                console.warn("Desync detected", data);
-                $("desync").textContent = "Desync detected (round " + data.round + ")";
+                if (data.frame !== undefined) {
+                    console.warn("Desync @ frame " + data.frame + " (epoch " + data.epoch + ")", "local:", data.local, "remote:", data.remote);
+                    $("desync").textContent = "Desync @ frame " + data.frame;
+                } else {
+                    console.warn("Desync detected", data);
+                    $("desync").textContent = "Desync detected (round " + data.round + ")";
+                }
                 $("desync").classList.remove("hidden");
                 clearTimeout(desyncTimer);
                 desyncTimer = setTimeout(hideDesync, 5000);
