@@ -84,6 +84,22 @@ Relay rules (per room):
 - TICK_INPUT received while not ticking just updates the stored latest k.
 - Types 6/7 are NOT forwarded to the other seat. Types 1/2 forwarding is unchanged.
 - Rate: each SWF sends ≤ 30 TICK_INPUT/s + ping; relay sends 30 TICK_FRAME/s to each seat.
+- Backpressure (anti-drift): the relay tracks each seat's `lastFrame` (from TICK_INPUT, latest
+  value received during the current epoch, 0 at START). It must not create frame N+1 while
+  `N - min(lastFrame of both seats) >= MAX_LEAD` (env `TICK_MAX_LEAD`, default 12 frames =
+  400 ms). While held back it simply skips creating frames (the schedule origin is shifted so it
+  resumes at 30 Hz without a burst). This keeps the slower browser's buffer bounded; the faster
+  one waits a frame occasionally. Log `tick_hold` at most once per second while holding.
+
+### Desync check (SESSION, JSON)
+
+Both SWFs, every 30 relay frames during a fight segment, after simulating frame N:
+`{"type":"WEB_HASH","epoch":E,"frame":N,"hash":<uint32>,"detail":"<short field summary>"}`
+sent via SESSION to the peer. Each side keeps its own last ~10 hashes; when a peer hash for
+(E, N) differs from the local one → desync: log both details once per epoch, emit page event
+`desync {"frame":N,"epoch":E,"local":"…","remote":"…"}`. AS3 contract:
+`LockFrameRelayLogic.onStateHash:Function` — `function(epoch:uint, frame:uint, hash:uint, detail:String):void`,
+called on both peers every `LanNetConfig.HASH_INTERVAL` (30) frames after simulating that frame.
 
 SWF rules:
 - Each SWF sends TICK_INPUT once per local tick while a fight segment is active.
