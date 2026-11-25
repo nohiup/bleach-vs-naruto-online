@@ -47,6 +47,11 @@ public class WebBridge {
      * @default bvnSetSettings
      */
     public static const SETTINGS_FUNC:String = 'bvnSetSettings';
+    /**
+     * SWF 向页面注册的 FPS 叠层开关回调名。
+     * @default bvnToggleFps
+     */
+    public static const FPS_FUNC:String = 'bvnToggleFps';
 
     /**
      * 向页面上报事件。
@@ -111,6 +116,27 @@ public class WebBridge {
         }
         catch (e:Error) {
             trace('WebBridge.registerSettings', e);
+        }
+    }
+
+    /**
+     * 注册页面可调用的 FPS 叠层开关回调 <code>bvnToggleFps([show])</code>。
+     * @param handler 接收可选布尔参数的回调。
+     * @example
+     * <listing version="3.0">
+     * WebBridge.registerFps(fps.toggle);
+     * </listing>
+     */
+    public static function registerFps(handler:Function):void {
+        if (!ExternalInterface.available) {
+            return;
+        }
+
+        try {
+            ExternalInterface.addCallback(FPS_FUNC, handler);
+        }
+        catch (e:Error) {
+            trace('WebBridge.registerFps', e);
         }
     }
 

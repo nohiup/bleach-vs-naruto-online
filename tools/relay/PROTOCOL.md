@@ -60,9 +60,11 @@ across messages (treat it as a byte stream — Ruffle delivers a TCP-like stream
 ## SWF <-> page
 
 FlashVars passed by the page: `web=1`, `role`, `token`, `nick`, `relayHost=bvn-game`, `relayPort=17511`.
-Optional: `mode` (`team` | `single`, default `single`), `inputDelay` (int 1-6, default 3; clamped; only the host's value is used, it is synced to the client at game start), `hp` (number, one of `0.5`, `1`, `2`, `3`, `5`, default `1`) and `time` (int seconds, one of `30`, `60`, `90`, `-1` = unlimited, default `60`); invalid values fall back to the default; only the host's `hp`/`time` are used.
+Optional: `showFps` (`1` = start with the FPS overlay visible, default hidden), `mode` (`team` | `single`, default `single`), `inputDelay` (int 1-6, default 3; clamped; only the host's value is used, it is synced to the client at game start), `hp` (number, one of `0.5`, `1`, `2`, `3`, `5`, default `1`) and `time` (int seconds, one of `30`, `60`, `90`, `-1` = unlimited, default `60`); invalid values fall back to the default; only the host's `hp`/`time` are used.
 
-Session message (SESSION frame, JSON) host -> client, sent before the host's `WEB_READY`: `{"type":"WEB_SETTINGS","hp":<num>,"time":<int>,"inputDelay":<int>}`. The client validates `hp`/`time` against the same sets (invalid -> default); it ignores `inputDelay` for gameplay (it receives the real delay via SYNC GAME_START) and only echoes it in `matchSettings`, applies them to its game config, and does not start the match until it has received it. Both sides apply `hp`/`time` before entering character select and restore the player's own offline values when the session ends; nothing is saved to local storage while overridden.
+Session message (SESSION frame, JSON) host -> client, sent before the host's `WEB_READY`: `{"type":"WEB_SETTINGS","hp":<num>,"time":<int>,"inputDelay":<int>}`. The client validates `hp`/`time` against the same sets (invalid -> default); it ignores `inputDelay` for gameplay (it receives the real delay via SYNC GAME_START) and only echoes it in `matchSettings`, applies them to its game config, and does not start the match until it has received it. Both sides apply `hp`/`time` before entering character select, re-apply them every time character select, loading or the match stage is entered again (so every rematch in the same session uses the host's settings), and restore the player's own offline values only when the session really ends (leave, disconnect, peer left, back to main menu); nothing is saved to local storage while overridden.
+
+Rematch: after a normal match end the SWF emits `matchEnd` and the game returns to character select through its normal LAN flow; the relay connection and the session stay open. The lobby keeps both players in the room, shows a brief "Match finished - next match" notice and a win counter "Host N - M Client" in the top bar (reset when a new session starts). Only "Leave match" / `bvnLeave` (or a disconnect) ends the session.
 
 SWF calls `window.bvnOnEvent(name, json)` via `ExternalInterface` (`json` is a JSON string):
 
@@ -72,14 +74,16 @@ SWF calls `window.bvnOnEvent(name, json)` via `ExternalInterface` (`json` is a J
 | `peerReady` | `{}` | both seats claimed |
 | `matchSettings` | `{"hp":num,"time":int,"inputDelay":int}` | effective life ratio, round time and input delay applied for this match (both peers, emitted right before character select, before `matchStart`) |
 | `matchStart` | `{"role":"host"\|"client"}` | a match began |
-| `matchEnd` | `{"winner":"host"\|"client"}` or `{}` | match finished normally (winner omitted if unknown); not a disconnect, the session is then closed silently |
+| `matchEnd` | `{"winner":"host"\|"client"}` or `{}` | one match finished normally (winner omitted if unknown); NOT a disconnect and the session stays open: the game returns to character select for a rematch with the same settings, and the page should only update its UI (e.g. win counter, "Match finished - next match") |
 | `stall` | `{"ms":int}` | waiting for the peer's input for `ms` ms (emitted after 500 ms, at most every 250 ms, only once a round has started) |
 | `resume` | `{"ms":int}` | the stall that was reported ended after `ms` ms |
 | `desync` | `{"round":int,"p1":[local,remote],"p2":[local,remote]}` | HP mismatch vs host at round sync (client only); match continues |
-| `disconnected` | `{"reason":"peer_left"\|"socket_close"\|"stall_timeout"\|"sync_error"\|"leave"}` | session failed or was left; `stall_timeout` = 10 s stall during a round |
+| `disconnected` | `{"reason":"peer_left"\|"socket_close"\|"stall_timeout"\|"sync_error"\|"leave"}` | the session ended (failure, `bvnLeave`, or a player backing out to the game's main menu, reported as `leave`); `stall_timeout` = 10 s stall during a round |
 | `ping` | `{"rtt":ms}` | relay round trip |
 | `error` | `{"msg":"..."}` | non-fatal error |
 
 Page may call SWF callback `bvnLeave()` (registered with `ExternalInterface.addCallback`); it ends the session and emits `disconnected {"reason":"leave"}`.
+
+Page may call SWF callback `bvnToggleFps([show])` (registered with `ExternalInterface.addCallback`) to show/hide the FPS overlay (small semi-transparent box, top-right: render FPS measured from `ENTER_FRAME` and refreshed twice a second, stage `frameRate`, game logic FPS); no argument toggles, a boolean sets it. The same overlay toggles with the `F3` key inside the SWF. The lobby remembers its "Show FPS" checkbox in `localStorage` (`bvn.fps`) and passes `showFps=1` at start.
 
 Host page may call SWF callback `bvnSetSettings(json)` (registered with `ExternalInterface.addCallback`) with `{"hp":num,"time":int,"inputDelay":int}` (fields optional). Each field is validated like the FlashVars (`hp` in 0.5/1/2/3/5, `time` in 30/60/90/-1, `inputDelay` int 1-6); an invalid field keeps its current value (FlashVars initial values, overridden by earlier calls). It is accepted only on the host and only until the host has sent `WEB_SETTINGS` (i.e. before the match starts); otherwise it is ignored (logged to the console). The values current at `WEB_SETTINGS` send time are the ones used for the match.

@@ -128,6 +128,11 @@ public class WebParams {
      * @default 60
      */
     public var time:int = TIME_DEFAULT;
+    /**
+     * 是否一开始就显示 FPS 叠层（FlashVar <code>showFps=1</code>）。
+     * @default false
+     */
+    public var showFps:Boolean = false;
 
     /**
      * 校验生命比例，非法值回落默认。
@@ -205,6 +210,8 @@ public class WebParams {
         if (params['time']) {
             time = normalizeTime(params['time']);
         }
+
+        showFps = params['showFps'] == '1' || params['showFps'] == 'true';
     }
 }
 }
