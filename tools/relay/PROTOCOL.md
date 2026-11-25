@@ -57,6 +57,56 @@ across messages (treat it as a byte stream — Ruffle delivers a TCP-like stream
 - Limits: frame payload <= 4096 bytes, <= 120 frames/s per connection, <= 5 connections per IP.
 - Bad HELLO token -> close socket.
 
+### Relay-paced fight frames (symmetric netcode)
+
+During a fight the RELAY is the clock. Both SWFs are equal clients: neither waits for the
+other; each plays the relay's frame stream from a jitter buffer. All integers big-endian.
+
+| type | name       | direction    | payload |
+|------|------------|--------------|---------|
+| 6    | TICK_CTRL  | swf -> relay | `[u8 cmd][u32 epoch]` — cmd 1 = START, 2 = STOP |
+| 7    | TICK_INPUT | swf -> relay | `[u32 lastFrame][i16 k]` — sender's latest local input bitmask `k` and the last frame it has simulated |
+| 8    | TICK_FRAME | relay -> swf | `[u32 startFrame][u8 count]` then `count` × `[i16 p1K][i16 p2K]` for frames `startFrame .. startFrame+count-1` |
+
+Relay rules (per room):
+- `epoch` identifies one fight segment (one round). Both SWFs use the same sequence 1, 2, 3, …
+  (reset to 1 when a new match starts on the select screen → the SWF simply counts rounds of the
+  current match; START with an epoch <= the running one is ignored).
+- Ticking starts only when BOTH seats sent START with the same epoch. Then: frame counter = 0,
+  latest k of both seats = 0, and every 1000/30 ms (drift-free schedule based on a monotonic
+  clock; if the timer fires late, emit all due frames at once) the relay creates frame N+1 with
+  `p1K` = latest TICK_INPUT k of the HOST seat and `p2K` = latest k of the CLIENT seat.
+- After creating frames, the relay sends ONE TICK_FRAME to both seats containing the newest
+  frames, always repeating the last 4 frames for redundancy (count ≤ 8 normally; ≤ 64 if
+  catching up after a late timer).
+- STOP (either seat) or a START with a higher epoch from one seat stops ticking (no more frames)
+  until both seats START the next epoch. Peer leave / room reset also stops ticking.
+- TICK_INPUT received while not ticking just updates the stored latest k.
+- Types 6/7 are NOT forwarded to the other seat. Types 1/2 forwarding is unchanged.
+- Rate: each SWF sends ≤ 30 TICK_INPUT/s + ping; relay sends 30 TICK_FRAME/s to each seat.
+
+SWF rules:
+- Each SWF sends TICK_INPUT once per local tick while a fight segment is active.
+- Frame N is simulated only after frame N arrived; both peers apply exactly `p1K` to P1 and
+  `p2K` to P2 for frame N → identical simulation. Local input reaches the screen after
+  ~RTT(to relay) + buffer, equally for both players.
+- Select screen, settings, round/game finish SYNC and snapshots keep using SESSION (type 1)
+  messages exactly as today; finish/snapshot messages carry the relay frame number and are
+  applied when the receiver reaches that frame.
+
+AS3 contract (CORE ↔ SHELL_Web):
+- `CORE_Shared/.../interfaces/lan/ILanRelayLockLink.as`:
+  `function sendTickCtrl(cmd:int, epoch:uint):void;` and `function sendTickInput(lastFrame:uint, k:int):void;`
+- `CORE_Shared/.../data/lan/LanRelayTick.as`: constants `CMD_START = 1`, `CMD_STOP = 2`,
+  `FRAME_TYPE_CTRL = 6`, `FRAME_TYPE_INPUT = 7`, `FRAME_TYPE_FRAME = 8`.
+- `LanNetConfig.relayPaced:Boolean` (default false). When true, SHELL_Web creates
+  `LockFrameRelayLogic` (CORE_KernelLogic, ctrler/lan) on BOTH peers instead of
+  LockFrameServerLogic/LockFrameClientLogic for the fight:
+  `init(link:ILanRelayLockLink, localInput:GameSocketInput, inputP1:GameSocketInput, inputP2:GameSocketInput, localIsP1:Boolean)`,
+  `render():Boolean` (called by LockFrameLogic each ENTER_FRAME), `receiveTickFrame(payload:ByteArray):void`
+  (payload = TICK_FRAME payload without the 3-byte frame header), `stallMonitor`, `frame:uint`,
+  `bufferedFrames:int`, `dispose()`.
+
 ## SWF <-> page
 
 FlashVars passed by the page: `web=1`, `role`, `token`, `nick`, `relayHost=bvn-game`, `relayPort=17511`.
