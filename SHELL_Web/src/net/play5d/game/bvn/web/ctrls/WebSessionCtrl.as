@@ -22,6 +22,7 @@ import flash.text.TextFormat;
 import flash.utils.ByteArray;
 import flash.utils.getTimer;
 
+import net.play5d.game.bvn.GameConfig;
 import net.play5d.game.bvn.MainGame;
 import net.play5d.game.bvn.ctrler.game_ctrls.GameCtrl;
 import net.play5d.game.bvn.ctrler.lan.LANUtils;
@@ -157,6 +158,32 @@ public class WebSessionCtrl {
     private var _lastStallEmit:int;
     /** @private 本次卡顿是否已上报过 stall */
     private var _stallEmitted:Boolean;
+    /** @private 联机前的 <code>GameConfig.FPS_SHINE_EFFECT</code>，会话结束时还原 */
+    private var _origShine:int;
+    /** @private 是否已覆盖 <code>FPS_SHINE_EFFECT</code> */
+    private var _shineOverridden:Boolean;
+    /** @private 锁帧渲染回调累计调用次数 */
+    private var _renderCount:int;
+    /** @private 锁帧渲染回调累计返回 <code>false</code>（本帧等待对端）次数 */
+    private var _stallCount:int;
+
+    /**
+     * 锁帧渲染回调累计调用次数（仅对战场景内），供 FPS 叠层按窗口差分计算卡顿占比。
+     * @return 累计次数。
+     * @default 0
+     */
+    public function get renderCount():int {
+        return _renderCount;
+    }
+
+    /**
+     * 锁帧渲染回调累计返回 <code>false</code> 的次数（本帧因等待对端输入而不推进逻辑）。
+     * @return 累计次数。
+     * @default 0
+     */
+    public function get stallCount():int {
+        return _stallCount;
+    }
 
     /**
      * 本机是否为房主且对战进行中。
@@ -428,6 +455,11 @@ public class WebSessionCtrl {
         _matchStarted = true;
         active        = true;
 
+        // 全屏闪光只影响画面，不参与逻辑；联机期间双方一律关闭以减轻渲染
+        _origShine       = GameConfig.FPS_SHINE_EFFECT;
+        _shineOverridden = true;
+        GameConfig.FPS_SHINE_EFFECT = 0;
+
         GameEvent.addEventListener(GameEvent.GAME_START, onGameStart);
         GameEvent.addEventListener(GameEvent.GAME_END, onGameEnd);
         GameEvent.addEventListener(GameEvent.ENTER_STAGE, onEnterStage);
@@ -563,7 +595,10 @@ public class WebSessionCtrl {
     /** @private */
     private function renderHost():Boolean {
         if (_serverLogic && MainGame.stageCtrl.currentStage is GameStage) {
-            return _serverLogic.render();
+            var ok:Boolean = _serverLogic.render();
+            countRender(ok);
+
+            return ok;
         }
 
         InputManager.I.socket_input_p1.freeRender();
@@ -571,10 +606,22 @@ public class WebSessionCtrl {
         return true;
     }
 
+    /** @private 累计渲染回调与卡顿帧数 */
+    private function countRender(ok:Boolean):void {
+        _renderCount++;
+
+        if (!ok) {
+            _stallCount++;
+        }
+    }
+
     /** @private */
     private function renderClient():Boolean {
         if (_clientLogic && MainGame.stageCtrl.currentStage is GameStage) {
-            return _clientLogic.render();
+            var ok:Boolean = _clientLogic.render();
+            countRender(ok);
+
+            return ok;
         }
 
         InputManager.I.socket_input_p2.freeRender();
@@ -731,6 +778,11 @@ public class WebSessionCtrl {
         }
 
         active = false;
+
+        if (_shineOverridden) {
+            _shineOverridden            = false;
+            GameConfig.FPS_SHINE_EFFECT = _origShine;
+        }
 
         if (_selectServer) {
             _selectServer.dispose();

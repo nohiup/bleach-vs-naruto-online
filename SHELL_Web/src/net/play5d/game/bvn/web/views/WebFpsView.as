@@ -25,10 +25,11 @@ import flash.text.TextFormat;
 import flash.utils.getTimer;
 
 import net.play5d.game.bvn.GameConfig;
+import net.play5d.game.bvn.web.ctrls.WebSessionCtrl;
 
 /**
  * FPS 叠层：舞台右上角的半透明小框，约每 0.5 秒刷新一次渲染帧率（<code>ENTER_FRAME</code> 计数）、
- * 舞台帧率与逻辑帧率（<code>GameConfig.FPS_GAME</code>）。仅一个 <code>TextField</code>，无滤镜；隐藏时不监听帧事件。
+ * 舞台帧率、逻辑帧率（<code>GameConfig.FPS_GAME</code>）与近 1 秒锁帧卡顿占比（渲染回调返回 <code>false</code> 的帧数比例）。仅一个 <code>TextField</code>，无滤镜；隐藏时不监听帧事件。
  *
  * @example
  * <listing version="3.0">
@@ -72,6 +73,14 @@ public class WebFpsView extends Sprite {
     private var _t0:int;
     /** @private 统计窗口内帧数 */
     private var _frames:int;
+    /** @private 上个窗口末的锁帧渲染累计次数 */
+    private var _renderPrev:int;
+    /** @private 上个窗口末的锁帧卡顿累计次数 */
+    private var _stallPrev:int;
+    /** @private 上上个窗口的渲染次数增量（与当前窗口合计约 1 秒） */
+    private var _renderLast:int;
+    /** @private 上上个窗口的卡顿次数增量 */
+    private var _stallLast:int;
 
     /**
      * 显示或隐藏叠层；显示时加到舞台最上层并开始统计，隐藏时移除并停止监听。
@@ -88,8 +97,12 @@ public class WebFpsView extends Sprite {
         if (v) {
             _stage.addChild(this);
             reposition();
-            _frames = 0;
-            _t0     = getTimer();
+            _frames     = 0;
+            _t0         = getTimer();
+            _renderPrev = WebSessionCtrl.I.renderCount;
+            _stallPrev  = WebSessionCtrl.I.stallCount;
+            _renderLast = 0;
+            _stallLast  = 0;
             addEventListener(Event.ENTER_FRAME, onFrame);
         }
         else {
@@ -120,9 +133,20 @@ public class WebFpsView extends Sprite {
             return;
         }
 
+        var ctrl:WebSessionCtrl = WebSessionCtrl.I;
+        var rc:int              = ctrl.renderCount - _renderPrev;
+        var sc:int              = ctrl.stallCount - _stallPrev;
+        var rt:int              = rc + _renderLast;
+        var stallPct:int        = rt > 0 ? int((sc + _stallLast) * 100 / rt) : 0;
+        _renderPrev             = ctrl.renderCount;
+        _stallPrev              = ctrl.stallCount;
+        _renderLast             = rc;
+        _stallLast              = sc;
+
         _txt.text = 'FPS ' + (_frames * 1000 / dt).toFixed(1)
                 + ' | stage ' + int(_stage.frameRate)
-                + ' | logic ' + GameConfig.FPS_GAME;
+                + ' | logic ' + GameConfig.FPS_GAME
+                + ' | stall ' + stallPct + '%';
         reposition();
         _frames = 0;
         _t0     = now;
