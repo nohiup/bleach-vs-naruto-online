@@ -201,16 +201,18 @@ public class LanClientSyncCore {
             syncStartGame();
             break;
         case LanSyncType.ROUND_FINISH:
-            if (_lockFrame) {
-                _lockFrame.enabled = false;
-                _lockFrame.reset();
-            }
-            KyoTimeout.setFrameTimeout(function ():void {
-                syncRoundFinish(arr);
-            }, 1, MainGame.I.stage);
+            atHostFrame(arr.length > 7 ? int(arr[7]) : 0, function ():void {
+                if (_lockFrame) {
+                    _lockFrame.enabled = false;
+                    _lockFrame.reset();
+                }
+                KyoTimeout.setFrameTimeout(function ():void {
+                    syncRoundFinish(arr);
+                }, 1, MainGame.I.stage);
+            });
             break;
         case LanSyncType.GAME_FINISH:
-            syncGameFinish();
+            atHostFrame(arr.length > 2 ? int(arr[2]) : 0, syncGameFinish);
             break;
         }
 
@@ -224,6 +226,17 @@ public class LanClientSyncCore {
         if (_lockFrame) {
             _lockFrame.enabled = true;
         }
+    }
+
+    /** @private 房主主导时延后到本机播放至房主同一帧再执行；否则立即执行 */
+    private function atHostFrame(hostFrame:int, fn:Function):void {
+        if (_lockFrame && LanNetConfig.hostPaced && hostFrame > 0) {
+            _lockFrame.runAtFrame(hostFrame, fn);
+
+            return;
+        }
+
+        fn();
     }
 
     private function syncStartGame():void {

@@ -22,6 +22,7 @@ import flash.utils.ByteArray;
 import net.play5d.game.bvn.MainGame;
 import net.play5d.game.bvn.ctrler.game_ctrls.GameCtrl;
 import net.play5d.game.bvn.data.lan.LanMsgType;
+import net.play5d.game.bvn.data.lan.LanNetConfig;
 import net.play5d.game.bvn.data.vos.GameRunDataVO;
 import net.play5d.game.bvn.interfaces.lan.ILanServerLockLink;
 import net.play5d.game.bvn.interfaces.lan.ILanSocketInput;
@@ -33,6 +34,12 @@ import net.play5d.kyo.stage.IStage;
  * 锁帧算法（服务端）。
  *
  * <p>等待间隔与同步间隔使用 <code>LANUtils.LOCK_KEYFRAME</code> / <code>SYNC_GAP</code>。</p>
+ *
+ * <p>当 <code>LanNetConfig.hostPaced</code> 为 <code>true</code> 时改走「房主主导」：
+ * 房主每帧用本机 P1 输入与客户端最近一次 P2 输入推进，并把每帧实际采用的输入对下发；
+ * 仅当客户端落后超过 <code>LanNetConfig.HOST_MAX_LEAD</code> 帧时才停顿。
+ * 下发包 <code>INPUT_UPDATE</code>：<code>byte type, ushort startFrame, byte count, count * (short p1K, short p2K)</code>，
+ * 含最近至多 <code>PACED_WINDOW</code> 帧（冗余以抵御丢包）。</p>
  *
  * @see LockFrameClientLogic
  * @see net.play5d.game.bvn.interfaces.lan.ILanServerLockLink
@@ -74,6 +81,10 @@ public class LockFrameServerLogic {
     private var _sendUpdateSyncFrame:int;
     /** @private */
     private var _updateCache:Object = {};
+    /** @private 房主主导：单次下发的帧窗口（含冗余） */
+    private static const PACED_WINDOW:int = 4;
+    /** @private 房主主导：输入缓存保留的历史帧数 */
+    private static const PACED_KEEP:int = 8;
     /** @private */
     private var _link:ILanServerLockLink;
     /** @private */
@@ -103,7 +114,19 @@ public class LockFrameServerLogic {
         _serverK         = 0;
         _syncUpdateArr   = null;
         _sendUpdateFrame = 0;
+        if (LanNetConfig.hostPaced) {
+            _clientFrame     = 0;
+            _renderSyncFrame = 0;
+            _updateCache     = {};
+        }
         stallMonitor.reset();
+    }
+
+    /**
+     * 当前已推进的帧号（房主主导模式下供回合 / 结束消息携带，使客户端播放到同一帧再结算）。
+     */
+    public function get frame():int {
+        return _renderFrame;
     }
 
     /**
@@ -131,6 +154,9 @@ public class LockFrameServerLogic {
     private function renderFrame():Boolean {
         if (!enabled) {
             return true;
+        }
+        if (LanNetConfig.hostPaced) {
+            return renderFramePaced();
         }
         if (_clientK == -1) {
             return false;
@@ -192,10 +218,60 @@ public class LockFrameServerLogic {
             return false;
         }
 
-        _clientFrame = kb.readShort();
+        _clientFrame = kb.readUnsignedShort();
         _clientK     = kb.readShort();
 
         return true;
+    }
+
+    /**
+     * @private 房主主导：不等待客户端；落后过多才停顿。
+     * 本帧输入对 = 本机 P1 + 客户端最近一次 P2；记录并下发的就是随后自身采用的值。
+     */
+    private function renderFramePaced():Boolean {
+        if (_renderFrame - _clientFrame > LanNetConfig.HOST_MAX_LEAD) {
+            return false;
+        }
+
+        _inputP1.renderInput();
+
+        var k1:int = _inputP1.getSocketData();
+        _inputP1.resetInput();
+
+        _renderFrame++;
+        _renderSyncFrame++;
+        _updateCache[_renderFrame] = [k1, _clientK < 0 ? 0 : _clientK];
+        delete _updateCache[_renderFrame - PACED_KEEP];
+
+        // 快照先于该帧输入包下发，客户端播放到该帧时再应用
+        if (_renderSyncFrame > LANUtils.SYNC_GAP) {
+            var snap:ByteArray = getSyncUpdate();
+            if (snap) {
+                _link.sendUDP(snap);
+                _renderSyncFrame = 0;
+            }
+        }
+
+        sendPacedUpdate();
+        renderUpdate();
+
+        return true;
+    }
+
+    /** @private 房主主导：下发最近若干帧的输入对 */
+    private function sendPacedUpdate():void {
+        var start:int   = Math.max(1, _renderFrame - PACED_WINDOW + 1);
+        var count:int   = _renderFrame - start + 1;
+        var b:ByteArray = new ByteArray();
+        b.writeByte(LanMsgType.INPUT_UPDATE);
+        b.writeShort(start);
+        b.writeByte(count);
+        for (var f:int = start; f <= _renderFrame; f++) {
+            b.writeShort(_updateCache[f][0]);
+            b.writeShort(_updateCache[f][1]);
+        }
+
+        _link.sendUDP(b);
     }
 
     /** @private */

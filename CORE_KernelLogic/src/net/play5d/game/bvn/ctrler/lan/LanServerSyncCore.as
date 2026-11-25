@@ -93,12 +93,17 @@ public class LanServerSyncCore {
     }
 
     private function onGameEnd(e:GameEvent):void {
+        var endFrame:int = _lockFrame ? _lockFrame.frame : 0;
         if (_lockFrame) {
             _lockFrame.enabled = false;
             _lockFrame.reset();
         }
         if (_sendTCP != null) {
-            _sendTCP(['SYNC', LanSyncType.GAME_FINISH]);
+            _sendTCP(
+                LanNetConfig.hostPaced
+                    ? ['SYNC', LanSyncType.GAME_FINISH, endFrame]
+                    : ['SYNC', LanSyncType.GAME_FINISH]
+            );
         }
     }
 
@@ -119,6 +124,10 @@ public class LanServerSyncCore {
             runData.round, runData.isTimerOver, runData.isDrawGame,
             p1.hp << 0, p2.hp << 0
         ];
+        if (LanNetConfig.hostPaced && _lockFrame) {
+            // 房主结算帧号：客户端播放到该帧后再结算，避免提前结束
+            data.push(_lockFrame.frame);
+        }
         if (_sendTCP != null) {
             _sendTCP(data);
         }
