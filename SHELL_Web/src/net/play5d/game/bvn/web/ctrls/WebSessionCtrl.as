@@ -688,7 +688,7 @@ public class WebSessionCtrl {
         _link.syncCore = _clientSync;
         _relayLogic.syncCore = _clientSync;
 
-        GameCtrl.I.autoEndRoundAble    = false;
+        // 回合结算由两端在同一中继帧各自确定性触发（房主消息仅兜底），故保留 autoEndRoundAble；整场开始仍由房主驱动
         GameCtrl.I.autoStartAble       = false;
         SelectFighterStage.AUTO_FINISH = false;
         LoadingStage.AUTO_START_GAME   = false;

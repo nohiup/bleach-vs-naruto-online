@@ -202,6 +202,11 @@ public class LanClientSyncCore {
             break;
         case LanSyncType.ROUND_FINISH:
             atHostFrame(arr.length > 7 ? int(arr[7]) : 0, function ():void {
+                if (LanNetConfig.relayPaced) {
+                    syncRoundFinishRelay(arr);
+
+                    return;
+                }
                 if (_lockFrame) {
                     _lockFrame.setEnabled(false);
                     _lockFrame.reset();
@@ -254,6 +259,20 @@ public class LanClientSyncCore {
             clearTimeout(_syncStartInt);
             _syncStartInt = setTimeout(syncStartGame, 500);
         }
+    }
+
+    /**
+     * @private 中继整场战斗段：双方确定性模拟，本机通常已在同一帧自行结算本回合，此时忽略房主消息；
+     * 仅当本机尚未结算（本回合仍在进行）时，才直接采用房主结果（同帧同步执行，不再延后）。
+     */
+    private function syncRoundFinishRelay(arr:Array):void {
+        var round:int = arr[2];
+        var cur:int   = GameCtrl.I.gameRunData.round;
+        if (cur > round || (cur == round && GameCtrl.I.roundEnding)) {
+            return;
+        }
+
+        syncRoundFinish(arr);
     }
 
     private function syncRoundFinish(arr:Array):void {

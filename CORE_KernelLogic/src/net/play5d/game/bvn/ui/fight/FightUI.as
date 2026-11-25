@@ -27,11 +27,13 @@ import flash.utils.setTimeout;
 
 import net.play5d.game.bvn.GameConfig;
 import net.play5d.game.bvn.ctrler.EffectCtrl;
+import net.play5d.game.bvn.ctrler.GameRender;
 import net.play5d.game.bvn.ctrler.SoundCtrl;
 import net.play5d.game.bvn.ctrler.game_ctrls.GameCtrl;
 import net.play5d.game.bvn.data.GameData;
 import net.play5d.game.bvn.data.GameMode;
 import net.play5d.game.bvn.data.GameRunFighterGroup;
+import net.play5d.game.bvn.data.lan.LanNetConfig;
 import net.play5d.game.bvn.data.TeamID;
 import net.play5d.game.bvn.events.GameEvent;
 import net.play5d.game.bvn.fighter.FighterMain;
@@ -95,6 +97,12 @@ public class FightUI implements IGameUI {
     private var _isSlowDown:Boolean;
     private var _pauseDialog:PauseDialog;
     private var _flyTimer:Number = 0;
+    /** @private 中继节拍：KO 第二段动画前的剩余渲染帧数 */
+    private var _koDelay:int;
+    /** @private 中继节拍：本次 KO 是否为必杀 KO */
+    private var _koBs:Boolean;
+    /** @private 中继节拍：结算阶段已渲染帧数（替代墙钟） */
+    private var _endFrames:int;
     private var _p1PosUI:$fight$SP_playerPos1;
     private var _p2PosUI:$fight$SP_playerPos2;
     private var _inputHistory1:TrainingInputHistoryUI;
@@ -118,6 +126,7 @@ public class FightUI implements IGameUI {
     }
 
     public function destroy():void {
+        GameRender.remove(renderKoDelay, this);
         GameEvent.removeEventListener(GameEvent.SCORE_UPDATE, updateScore);
         if (_pauseDialog) {
             _pauseDialog.destroy();
@@ -364,6 +373,7 @@ public class FightUI implements IGameUI {
     private function playKO(loser:FighterMain = null):void {
 
         _showWinnerDelay           = 0;
+        _endFrames                 = 0;
         EffectCtrl.I.freezeEnabled = false;
 
         _isSlowDown = false;
@@ -400,18 +410,36 @@ public class FightUI implements IGameUI {
         EffectCtrl.I.shake(5, 0, 1.5);
         SoundCtrl.I.playSwcSound(snd_over_hit);
 
-        setTimeout(playKO2, 500);
-
-        function playKO2():void {
-            ui.startKOmc.y = 0;
-            ui.startKOmc.gotoAndStop('ko');
-            ui.startKOmc.addEventListener(Event.COMPLETE, koBack);
-
-            SoundCtrl.I.playSwcSound(bsKO ? snd_ko_bs : snd_ko);
-            //				fadOut();
-            _qibar1.fadOut();
-            _qibar2.fadOut();
+        _koBs = bsKO;
+        if (LanNetConfig.relayPaced) {
+            // 联机中继：0.5 秒按渲染帧计数（GameRender 随中继帧推进），避免墙钟导致两端 KO 动画错位
+            _koDelay = Math.ceil(0.5 * GameConfig.FPS_GAME);
+            GameRender.add(renderKoDelay, this);
         }
+        else {
+            setTimeout(playKO2, 500);
+        }
+    }
+
+    /** @private 中继节拍：KO 延迟按帧倒计时 */
+    private function renderKoDelay():void {
+        if (--_koDelay > 0) {
+            return;
+        }
+
+        GameRender.remove(renderKoDelay, this);
+        playKO2();
+    }
+
+    private function playKO2():void {
+        ui.startKOmc.y = 0;
+        ui.startKOmc.gotoAndStop('ko');
+        ui.startKOmc.addEventListener(Event.COMPLETE, koBack);
+
+        SoundCtrl.I.playSwcSound(_koBs ? snd_ko_bs : snd_ko);
+        //				fadOut();
+        _qibar1.fadOut();
+        _qibar2.fadOut();
     }
 
     private function playTimeOver():void {
@@ -460,18 +488,23 @@ public class FightUI implements IGameUI {
 
         var loser:FighterMain = _endParam.loser;
 
+        _endFrames++;
+
         if (loser) {
             if (loser.actionState == FighterActionState.HURT_FLYING) {
                 if (!_isSlowDown) {
                     _isSlowDown = true;
 //						EffectCtrl.I.slowDown(2,0);
-                    _flyTimer   = getTimer();
+                    _flyTimer   = LanNetConfig.relayPaced ? _endFrames : getTimer();
                 }
             }
             if (loser.actionState == FighterActionState.DEAD) {
                 if (_isSlowDown) {
 
-                    if (getTimer() - _flyTimer < 2000) {
+                    // 联机中继按渲染帧计时（2000ms 折算帧数），其余沿用墙钟
+                    if (LanNetConfig.relayPaced
+                        ? (_endFrames - _flyTimer) < 2 * GameConfig.FPS_GAME
+                        : (getTimer() - _flyTimer < 2000)) {
                         _showWinnerDelay = 2 * GameConfig.FPS_GAME;
                     }
                     else {

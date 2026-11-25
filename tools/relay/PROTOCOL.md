@@ -102,6 +102,11 @@ sent via SESSION to the peer. Each side keeps its own last ~10 hashes; when a pe
 called on both peers every `LanNetConfig.HASH_INTERVAL` (30) frames after simulating that frame.
 
 SWF rules:
+- One segment per match on the fight stage: the SWF sends `START` (epoch = 1, 2, ... per match in the
+  session) when the match is built (`GAME_START`, before any intro animation runs) and `STOP` only when
+  the match is over / the fight stage is left (`GAME_END` or dispose). There is NO STOP/START between
+  rounds; intro, "ready/fight", KO and round transitions all advance only on relay frames. Until the
+  first frame of the epoch arrives the game is frozen on both peers (no free-running).
 - Each SWF sends TICK_INPUT once per local tick while a fight segment is active.
 - Frame N is simulated only after frame N arrived; both peers apply exactly `p1K` to P1 and
   `p2K` to P2 for frame N → identical simulation. Local input reaches the screen after
