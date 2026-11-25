@@ -42,8 +42,30 @@ public class LanNetConfig {
     /** 卡顿超过该毫秒数后，视为对手掉线并放弃对局 */
     public static const STALL_TIMEOUT_MS:int = 10000;
 
+    /** 房主主导模式下，客户端落后房主超过该帧数（30FPS 下约 3 秒）时房主才停顿等待 */
+    public static const HOST_MAX_LEAD:int = 90;
+    /** 客户端抖动缓冲在「输入延迟」之上的附加帧数（自动取值时使用） */
+    public static const CLIENT_BUFFER_EXTRA:int = 1;
+
+    /**
+     * 是否启用「房主主导」锁帧（高延迟 / 公网中继）。
+     *
+     * <p>为 <code>true</code> 时：房主不等待客户端，直接用客户端最近一次输入逐帧推进并下发每帧输入；
+     * 客户端经抖动缓冲逐帧回放。房主与客户端必须取值一致，且须在开局前设置；
+     * 为 <code>false</code>（默认）时保持原有局域网锁帧行为与线格式。</p>
+     *
+     * @default false
+     * @example
+     * <listing version="3.0">
+     * LanNetConfig.hostPaced = true;
+     * </listing>
+     */
+    public static var hostPaced:Boolean = false;
+
     /** @private */
     private static var _inputDelay:int = INPUT_DELAY_DEFAULT;
+    /** @private */
+    private static var _clientBufferFrames:int = -1;
 
     /**
      * 输入延迟（帧，基准 30FPS）；赋值时夹取到 <code>INPUT_DELAY_MIN</code>~<code>INPUT_DELAY_MAX</code>。
@@ -63,6 +85,26 @@ public class LanNetConfig {
     /** @private */
     public static function set inputDelay(v:int):void {
         _inputDelay = Math.max(INPUT_DELAY_MIN, Math.min(INPUT_DELAY_MAX, v));
+    }
+
+    /**
+     * 房主主导模式下客户端开播前需缓冲的帧数（当前帧之后）。
+     *
+     * <p>赋负值表示自动：<code>inputDelay + CLIENT_BUFFER_EXTRA</code>（默认 3 + 1 = 4）。</p>
+     *
+     * @default 自动
+     */
+    public static function get clientBufferFrames():int {
+        if (_clientBufferFrames >= 0) {
+            return _clientBufferFrames;
+        }
+
+        return _inputDelay + CLIENT_BUFFER_EXTRA;
+    }
+
+    /** @private */
+    public static function set clientBufferFrames(v:int):void {
+        _clientBufferFrames = v < 0 ? -1 : Math.max(1, v);
     }
 }
 }

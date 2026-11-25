@@ -32,6 +32,13 @@ import net.play5d.game.bvn.ctrler.lan.LANUtils;
  *
  * <p>通过 <code>init</code> 注入会话与双方 <code>ILanSocketInput</code>。</p>
  *
+ * <p>当 <code>LanNetConfig.hostPaced</code> 为 <code>true</code> 时改走「房主主导」：
+ * 客户端把房主下发的逐帧输入对放入抖动缓冲，缓冲满 <code>LanNetConfig.clientBufferFrames</code>
+ * 帧后每次 <code>render</code> 严格推进 1 帧（逻辑不可在同一 ENTER_FRAME 内重复步进，
+ * 否则 MovieClip 时间轴与逻辑失步，故不做追帧）；缓冲耗尽则停顿并重新缓冲。
+ * 每次 <code>render</code> 都上报本机输入与当前帧号。房主下发的快照与回合 / 结束消息
+ * 均延后到本机播放至房主同一帧时再应用。</p>
+ *
  * @see LockFrameServerLogic
  * @see net.play5d.game.bvn.interfaces.lan.ILanClientLockLink
  * @see net.play5d.game.bvn.interfaces.lan.ILanSocketInput
@@ -78,6 +85,18 @@ public class LockFrameClientLogic {
     private var _sendAnyWay:Boolean = false;
     /** @private 准备包发送节流计数 */
     private var _sendStartFrame:int = 0;
+    /** @private 房主主导：缓冲中已连续收到的最大房主帧号 */
+    private var _pacedHead:int;
+    /** @private 房主主导：是否已满足开播缓冲 */
+    private var _pacedStarted:Boolean;
+    /** @private 房主主导：待到帧应用的状态快照（帧号 -> 快照） */
+    private var _pacedSnaps:Object = {};
+    /** @private 房主主导：待到帧执行的结算回调及其目标帧 */
+    private var _finishFn:Function;
+    /** @private */
+    private var _finishFrame:int = -1;
+    /** @private */
+    private static const PACED_KEEP:int = 8;
     /** @private */
     private var _link:ILanClientLockLink;
     /** @private 本机视角下的 P1（服务端侧）输入 */
@@ -109,7 +128,43 @@ public class LockFrameClientLogic {
         _serverNextFrame = 0;
         _lastSendK       = 0;
         _sendStartFrame  = 0;
+        _pacedHead       = 0;
+        _pacedStarted    = false;
+        _pacedSnaps      = {};
+        _finishFn        = null;
+        _finishFrame     = -1;
         stallMonitor.reset();
+    }
+
+    /**
+     * 本机已播放到的帧号。
+     */
+    public function get frame():int {
+        return _clientFrame;
+    }
+
+    /**
+     * 房主主导模式下抖动缓冲中尚未播放的帧数（可供壳显示）。
+     */
+    public function get bufferedFrames():int {
+        return _pacedHead - _clientFrame;
+    }
+
+    /**
+     * 本机播放到房主帧 <code>hostFrame</code> 之后再执行回调；已到达或不适用时立即执行。
+     *
+     * @param hostFrame 房主事件发生时的帧号。
+     * @param fn 无参回调。
+     */
+    public function runAtFrame(hostFrame:int, fn:Function):void {
+        if (!enabled || _clientFrame >= hostFrame) {
+            fn();
+
+            return;
+        }
+
+        _finishFrame = hostFrame;
+        _finishFn    = fn;
     }
 
     /**
@@ -118,6 +173,8 @@ public class LockFrameClientLogic {
     public function dispose():void {
         stallMonitor.dispose();
         _updateCache = {};
+        _pacedSnaps  = {};
+        _finishFn    = null;
         _link        = null;
         _inputP1     = null;
         _inputP2     = null;
@@ -137,6 +194,9 @@ public class LockFrameClientLogic {
         var type:int    = msgArr.readByte();
         if (type != LanMsgType.INPUT_UPDATE) {
             return false;
+        }
+        if (LanNetConfig.hostPaced) {
+            return receivePacedUpdate(msgArr);
         }
 
         _serverFrame = msgArr.readShort();
@@ -165,14 +225,26 @@ public class LockFrameClientLogic {
             return false;
         }
 
+        if (LanNetConfig.hostPaced) {
+            _pacedSnaps[snap.frame] = snap;
+
+            return true;
+        }
+
         _updateCache = {};
         _serverFrame = snap.frame;
+        applySnapshot(snap);
 
+        return true;
+    }
+
+    /** @private 将房主状态快照写入本机战斗状态 */
+    private function applySnapshot(snap:LanInputSyncSnapshot):void {
         try {
             if (GameCtrl.I.gameRunData.round != snap.round) {
                 _link.syncError(true);
 
-                return true;
+                return;
             }
 
             //房主为准：-1 为无限时，客户端同步采用，避免本地限时倒计时误触发超时
@@ -194,8 +266,6 @@ public class LockFrameClientLogic {
             trace(e);
             _link.syncError(true);
         }
-
-        return true;
     }
 
     /**
@@ -218,6 +288,9 @@ public class LockFrameClientLogic {
     private function renderFrame():Boolean {
         if (!enabled) {
             return true;
+        }
+        if (LanNetConfig.hostPaced) {
+            return renderFramePaced();
         }
 
         if (_serverNextFrame == 0 && _serverFrame == 0) {
@@ -248,6 +321,85 @@ public class LockFrameClientLogic {
         }
 
         return false;
+    }
+
+    /** @private 房主主导：解析逐帧输入对并推进连续缓冲头 */
+    private function receivePacedUpdate(msgArr:ByteArray):Boolean {
+        var start:int = msgArr.readUnsignedShort();
+        var count:int = msgArr.readUnsignedByte();
+        var k1:int;
+        var k2:int;
+        for (var i:int = 0; i < count; i++) {
+            k1 = msgArr.readShort();
+            k2 = msgArr.readShort();
+            if (start + i > _clientFrame) {
+                _updateCache[start + i] = [k1, k2];
+            }
+        }
+
+        while (_updateCache[_pacedHead + 1]) {
+            _pacedHead++;
+        }
+
+        _link.updateDelay(getTimer() - _delayTimer);
+        _delayTimer = getTimer();
+
+        return true;
+    }
+
+    /** @private 房主主导：上报输入、按抖动缓冲每次推进 1 帧 */
+    private function renderFramePaced():Boolean {
+        sendPacedInput();
+
+        if (_finishFn != null && _clientFrame >= _finishFrame) {
+            var fn:Function = _finishFn;
+            _finishFn       = null;
+            _finishFrame    = -1;
+            fn();
+
+            return false;
+        }
+
+        var buffered:int = _pacedHead - _clientFrame;
+        if (!_pacedStarted) {
+            // 房主已结束时不会再有新帧，余量播完即可
+            if (buffered < (_finishFn != null ? 1 : LanNetConfig.clientBufferFrames)) {
+                return false;
+            }
+            _pacedStarted = true;
+        }
+        if (buffered < 1) {
+            _pacedStarted = false;
+
+            return false;
+        }
+
+        _clientFrame++;
+
+        var snap:LanInputSyncSnapshot = _pacedSnaps[_clientFrame];
+        if (snap) {
+            delete _pacedSnaps[_clientFrame];
+            applySnapshot(snap);
+        }
+
+        renderUpdate();
+        delete _updateCache[_clientFrame - PACED_KEEP];
+
+        return true;
+    }
+
+    /** @private 房主主导：每次 render 无条件上报本机输入与当前帧号 */
+    private function sendPacedInput():void {
+        _inputP2.renderInput();
+
+        var k:int = _inputP2.getSocketData();
+        _inputP2.resetInput();
+
+        var byte:ByteArray = new ByteArray();
+        byte.writeByte(LanMsgType.INPUT_SEND);
+        byte.writeShort(_clientFrame);
+        byte.writeShort(k);
+        _link.sendUDP(byte);
     }
 
     /** @private */
