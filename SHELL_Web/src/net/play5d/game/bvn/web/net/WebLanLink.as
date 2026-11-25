@@ -28,7 +28,9 @@ import flash.utils.Timer;
 import flash.utils.getTimer;
 
 import net.play5d.game.bvn.ctrler.lan.LanClientSyncCore;
+import net.play5d.game.bvn.data.lan.LanRelayTick;
 import net.play5d.game.bvn.interfaces.lan.ILanClientLockLink;
+import net.play5d.game.bvn.interfaces.lan.ILanRelayLockLink;
 import net.play5d.game.bvn.interfaces.lan.ILanServerLockLink;
 
 /**
@@ -37,7 +39,9 @@ import net.play5d.game.bvn.interfaces.lan.ILanServerLockLink;
  * <p>连接建立后先发 <code>HELLO</code>（token），收到 <code>HELLO_OK</code> 得知角色并启动每秒一次的
  * <code>PING</code>；会话消息（TCP 等价）走 <code>SESSION</code> 帧，锁帧输入（UDP 等价）走
  * <code>INPUT</code> 帧。同时实现锁帧服务端与客户端所需的链路契约，供 <code>LockFrameServerLogic</code> /
- * <code>LockFrameClientLogic</code> 注入。</p>
+ * <code>LockFrameClientLogic</code> 注入。中继节拍模式（<code>LanNetConfig.relayPaced</code>）下另实现
+ * <code>ILanRelayLockLink</code>：经 <code>TICK_CTRL</code> / <code>TICK_INPUT</code> 帧上行，
+ * 中继下发的 <code>TICK_FRAME</code> 交给 <code>onTickFrame</code>。</p>
  *
  * <p>回调属性均为可选；<code>onClose</code> 仅在非主动 <code>close()</code> 的断开时触发。</p>
  *
@@ -49,7 +53,7 @@ import net.play5d.game.bvn.interfaces.lan.ILanServerLockLink;
  * </listing>
  * @see WebFrameCodec
  */
-public class WebLanLink implements ILanServerLockLink, ILanClientLockLink {
+public class WebLanLink implements ILanServerLockLink, ILanClientLockLink, ILanRelayLockLink {
     /**
      * 握手成功回调，签名 <code>Function(role:String):void</code>。
      * @default null
@@ -80,6 +84,12 @@ public class WebLanLink implements ILanServerLockLink, ILanClientLockLink {
      * @default null
      */
     public var onInput:Function;
+    /**
+     * 收到中继节拍帧回调，签名 <code>Function(payload:ByteArray):void</code>；
+     * 载荷为 <code>TICK_FRAME</code> 去掉 3 字节帧头后的内容。
+     * @default null
+     */
+    public var onTickFrame:Function;
     /**
      * 往返延迟回调，签名 <code>Function(rtt:int):void</code>，单位毫秒。
      * @default null
@@ -201,6 +211,38 @@ public class WebLanLink implements ILanServerLockLink, ILanClientLockLink {
         }
 
         sendFrame(WebFrameCodec.INPUT, bytes);
+    }
+
+    /**
+     * 发送中继节拍控制（<code>TICK_CTRL</code> 帧，载荷 <code>[u8 cmd][u32 epoch]</code>）。
+     * @param cmd 控制命令，见 <code>LanRelayTick.CMD_START</code> / <code>CMD_STOP</code>。
+     * @param epoch 对局段序号（从 1 递增）。
+     * @example
+     * <listing version="3.0">
+     * link.sendTickCtrl(LanRelayTick.CMD_START, 1);
+     * </listing>
+     */
+    public function sendTickCtrl(cmd:int, epoch:uint):void {
+        var body:ByteArray = new ByteArray();
+        body.writeByte(cmd);
+        body.writeUnsignedInt(epoch);
+        sendFrame(LanRelayTick.FRAME_TYPE_CTRL, body);
+    }
+
+    /**
+     * 发送中继节拍输入（<code>TICK_INPUT</code> 帧，载荷 <code>[u32 lastFrame][i16 k]</code>）。
+     * @param lastFrame 本机已模拟的最新帧号。
+     * @param k 本机最新输入位掩码。
+     * @example
+     * <listing version="3.0">
+     * link.sendTickInput(frame, keys);
+     * </listing>
+     */
+    public function sendTickInput(lastFrame:uint, k:int):void {
+        var body:ByteArray = new ByteArray();
+        body.writeUnsignedInt(lastFrame);
+        body.writeShort(k);
+        sendFrame(LanRelayTick.FRAME_TYPE_INPUT, body);
     }
 
     /**
@@ -340,6 +382,11 @@ public class WebLanLink implements ILanServerLockLink, ILanClientLockLink {
         case WebFrameCodec.INPUT:
             if (onInput != null) {
                 onInput(payload);
+            }
+            break;
+        case LanRelayTick.FRAME_TYPE_FRAME:
+            if (onTickFrame != null) {
+                onTickFrame(payload);
             }
             break;
         case WebFrameCodec.PING:

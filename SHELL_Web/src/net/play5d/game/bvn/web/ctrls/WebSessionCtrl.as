@@ -30,9 +30,8 @@ import net.play5d.game.bvn.ctrler.lan.LanClientSyncCore;
 import net.play5d.game.bvn.ctrler.lan.LanGameMenuCtrl;
 import net.play5d.game.bvn.ctrler.lan.LanServerSyncCore;
 import net.play5d.game.bvn.ctrler.lan.LanStallMonitor;
-import net.play5d.game.bvn.ctrler.lan.LockFrameClientLogic;
 import net.play5d.game.bvn.ctrler.lan.LockFrameLogic;
-import net.play5d.game.bvn.ctrler.lan.LockFrameServerLogic;
+import net.play5d.game.bvn.ctrler.lan.LockFrameRelayLogic;
 import net.play5d.game.bvn.ctrler.lan.SelectFighterClientLogic;
 import net.play5d.game.bvn.ctrler.lan.SelectFighterServerLogic;
 import net.play5d.game.bvn.data.GameData;
@@ -58,8 +57,9 @@ import net.play5d.game.bvn.web.views.WebWaitState;
  * 浏览器壳的联机会话：经中继连接对手，握手就绪后进入选人与锁帧对战。
  *
  * <p>流程对齐 PC 壳 <code>LANServerCtrl</code> / <code>LANClientCtrl</code>：房主绑定
- * <code>LanServerSyncCore</code> 与锁帧服务端逻辑，客户端绑定 <code>LanClientSyncCore</code> 与锁帧客户端逻辑；
- * 跳过 UDP 发现与主机列表。游戏资源加载完成且收到 <code>PEER_READY</code> 后，双方互发
+ * <code>LanServerSyncCore</code>，客户端绑定 <code>LanClientSyncCore</code>；对战锁帧两端对称，
+ * 均使用 <code>LockFrameRelayLogic</code>（中继节拍，<code>LanNetConfig.relayPaced</code>），
+ * 由中继按固定节奏下发帧流；跳过 UDP 发现与主机列表。游戏资源加载完成且收到 <code>PEER_READY</code> 后，双方互发
  * <code>WEB_READY</code> 会话消息，都就绪才同时开始，避免一方尚未建好选人逻辑时丢包。</p>
  *
  * <p>一局正常结束只上报 <code>matchEnd</code>，会话保持：游戏沿用 LAN 流程回到选人，可用同一套对局设置再战；
@@ -143,9 +143,7 @@ public class WebSessionCtrl {
     /** @private */
     private var _selectClient:SelectFighterClientLogic;
     /** @private */
-    private var _serverLogic:LockFrameServerLogic;
-    /** @private */
-    private var _clientLogic:LockFrameClientLogic;
+    private var _relayLogic:LockFrameRelayLogic;
     /** @private */
     private var _serverSync:LanServerSyncCore;
     /** @private */
@@ -237,7 +235,7 @@ public class WebSessionCtrl {
         _link.onPeerLeft  = onPeerLeft;
         _link.onClose     = onLinkClosed;
         _link.onSession   = onSession;
-        _link.onInput     = onInput;
+        _link.onTickFrame = onTickFrame;
         _link.onRtt       = onRtt;
         _link.onError     = onLinkError;
 
@@ -404,25 +402,10 @@ public class WebSessionCtrl {
         }
     }
 
-    /** @private 锁帧输入：房主收客户端按键，客户端收服务端更新 */
-    private function onInput(bytes:ByteArray):void {
-        if (!_matchStarted) {
-            return;
-        }
-
-        if (_isHost) {
-            if (_serverLogic) {
-                _serverLogic.receiveInput(bytes);
-            }
-
-            return;
-        }
-
-        if (_clientLogic) {
-            if (_clientLogic.receiveSyncUpdate(bytes)) {
-                return;
-            }
-            _clientLogic.receiveUpdate(bytes);
+    /** @private 中继节拍帧：两端对称交给锁帧逻辑 */
+    private function onTickFrame(payload:ByteArray):void {
+        if (_relayLogic) {
+            _relayLogic.receiveTickFrame(payload);
         }
     }
 
@@ -523,30 +506,30 @@ public class WebSessionCtrl {
 
     /** @private 房主：对齐 LANServerCtrl.gameStart */
     private function startHost():void {
-        // 公网高延迟：房主按自身节奏推进，不等待客户端回报帧（见 LanNetConfig.hostPaced）
-        LanNetConfig.hostPaced = true;
+        // 两端对称由中继节拍驱动，不再使用房主节拍
+        LanNetConfig.relayPaced = true;
+        LanNetConfig.hostPaced  = false;
         GameInterface.instance.updateInputConfig();
-        LockFrameLogic.I.initServer(renderHost);
+        LockFrameLogic.I.initServer(renderRelay);
         LanNetConfig.inputDelay = _matchDelay;
         LANUtils.updateParams();
 
         _selectServer = new SelectFighterServerLogic();
         _selectServer.init(sendSession);
 
-        _serverLogic = new LockFrameServerLogic();
-        _serverLogic.init(_link, InputManager.I.socket_input_p1, InputManager.I.socket_input_p2);
-        bindStall(_serverLogic.stallMonitor);
+        createRelayLogic();
 
         LanGameMenuCtrl.I.init(createExitDialog());
 
         _serverSync ||= new LanServerSyncCore();
-        _serverSync.bind(_serverLogic, sendSession);
+        _serverSync.bind(_relayLogic, sendSession);
     }
 
     /** @private 客户端：对齐 LANClientCtrl.gameStart */
     private function startClient():void {
-        // 与房主一致：客户端以缓冲区播放房主帧流（见 LanNetConfig.hostPaced）
-        LanNetConfig.hostPaced = true;
+        // 与房主一致：客户端同样由中继节拍驱动
+        LanNetConfig.relayPaced = true;
+        LanNetConfig.hostPaced  = false;
         _delayText                   = new TextField();
         _delayText.text              = '0ms';
         var tf:TextFormat            = new TextFormat();
@@ -558,13 +541,10 @@ public class WebSessionCtrl {
         _selectClient = new SelectFighterClientLogic();
         _selectClient.init(sendSession);
 
-        _clientLogic = new LockFrameClientLogic();
-        _clientLogic.init(_link, InputManager.I.socket_input_p1, InputManager.I.socket_input_p2);
-        _clientLogic.fatalOnStallTimeout = false;
-        bindStall(_clientLogic.stallMonitor);
+        createRelayLogic();
 
         _clientSync ||= new LanClientSyncCore(100);
-        _clientSync.bind(_clientLogic, onSyncFatalError, _delayText);
+        _clientSync.bind(_relayLogic, onSyncFatalError, _delayText);
         _clientSync.onDesync = onDesync;
         _link.syncCore = _clientSync;
 
@@ -575,7 +555,7 @@ public class WebSessionCtrl {
 
         GameInterface.instance.updateInputConfig();
 
-        LockFrameLogic.I.initClient(renderClient);
+        LockFrameLogic.I.initClient(renderRelay);
 
         LanGameMenuCtrl.I.init(createExitDialog());
 
@@ -596,16 +576,34 @@ public class WebSessionCtrl {
         );
     }
 
-    /** @private */
-    private function renderHost():Boolean {
-        if (_serverLogic && MainGame.stageCtrl.currentStage is GameStage) {
-            var ok:Boolean = _serverLogic.render();
+    /** @private 创建两端对称的中继节拍锁帧逻辑并绑定卡顿回调 */
+    private function createRelayLogic():void {
+        _relayLogic = new LockFrameRelayLogic();
+        _relayLogic.init(
+            _link,
+            _isHost ? InputManager.I.socket_input_p1 : InputManager.I.socket_input_p2,
+            InputManager.I.socket_input_p1,
+            InputManager.I.socket_input_p2,
+            _isHost
+        );
+        bindStall(_relayLogic.stallMonitor);
+    }
+
+    /** @private 两端共用的锁帧渲染回调：对战场景走中继节拍，其余场景本侧输入空转 */
+    private function renderRelay():Boolean {
+        if (_relayLogic && MainGame.stageCtrl.currentStage is GameStage) {
+            var ok:Boolean = _relayLogic.render();
             countRender(ok);
 
             return ok;
         }
 
-        InputManager.I.socket_input_p1.freeRender();
+        if (_isHost) {
+            InputManager.I.socket_input_p1.freeRender();
+        }
+        else {
+            InputManager.I.socket_input_p2.freeRender();
+        }
 
         return true;
     }
@@ -617,20 +615,6 @@ public class WebSessionCtrl {
         if (!ok) {
             _stallCount++;
         }
-    }
-
-    /** @private */
-    private function renderClient():Boolean {
-        if (_clientLogic && MainGame.stageCtrl.currentStage is GameStage) {
-            var ok:Boolean = _clientLogic.render();
-            countRender(ok);
-
-            return ok;
-        }
-
-        InputManager.I.socket_input_p2.freeRender();
-
-        return true;
     }
 
     /** @private */
@@ -772,7 +756,8 @@ public class WebSessionCtrl {
         GameEvent.removeEventListener(GameEvent.ENTER_STAGE, onEnterStage);
         GameEvent.removeEventListener(GameEvent.ROUND_START, onRoundStart);
 
-        LanNetConfig.hostPaced = false;
+        LanNetConfig.relayPaced = false;
+        LanNetConfig.hostPaced  = false;
         _roundStarted = false;
         _stallEmitted = false;
 
@@ -805,13 +790,9 @@ public class WebSessionCtrl {
             _clientSync.unbind();
         }
 
-        if (_serverLogic) {
-            _serverLogic.dispose();
-            _serverLogic = null;
-        }
-        if (_clientLogic) {
-            _clientLogic.dispose();
-            _clientLogic = null;
+        if (_relayLogic) {
+            _relayLogic.dispose();
+            _relayLogic = null;
         }
 
         if (_link) {
