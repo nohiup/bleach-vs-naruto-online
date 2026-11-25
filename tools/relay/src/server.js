@@ -21,6 +21,8 @@ export function configFromEnv(env = process.env) {
         trustProxy: env.TRUST_PROXY === '1',
         // test only: delay every forwarded SESSION/INPUT frame by this many ms to simulate WAN latency
         simDelayMs: Math.max(0, Number(env.SIM_DELAY_MS) || 0),
+        // relay-paced ticks: max frames the relay may run ahead of the slowest client's lastFrame
+        tickMaxLead: Math.max(1, Math.floor(Number(env.TICK_MAX_LEAD)) || 12),
     };
 }
 
@@ -66,6 +68,7 @@ export function createRelay(overrides = {}) {
             later(() => room.seats.forEach((s) => send(s.game, out)));
         },
         onEvent: (event, fields) => log(event, fields),
+        maxLead: cfg.tickMaxLead,
     });
     const lobbies = new Set();
     const ipCounts = new Map();
@@ -172,10 +175,11 @@ export function createRelay(overrides = {}) {
         if (p.length !== (isCtrl ? 5 : 6) || !room.ready) return;
         const a = isCtrl ? p.readUInt8(0) : p.readUInt32BE(0);
         const b = isCtrl ? p.readUInt32BE(1) : p.readInt16BE(4);
+        const last = isCtrl ? 0 : a;
         later(() => {
             if (!room.seats.includes(seat) || !room.ready) return;
             if (isCtrl) ticker.ctrl(seat.role, a, b);
-            else ticker.input(seat.role, b);
+            else ticker.input(seat.role, b, last);
         });
     }
 
