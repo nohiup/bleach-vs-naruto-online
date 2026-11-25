@@ -81,6 +81,12 @@ public class WebSessionCtrl {
     private static const MSG_READY:String = 'WEB_READY';
     /** @private 房主下发对局设置（生命 / 时间 / 输入延迟）的会话消息类型 */
     private static const MSG_SETTINGS:String = 'WEB_SETTINGS';
+    /** @private 状态哈希会话消息类型（两端互发，用于失同步检测） */
+    private static const MSG_HASH:String = 'WEB_HASH';
+    /** @private 状态哈希环形缓存保留条数 */
+    private static const HASH_RING:int = 10;
+    /** @private 单帧中继逻辑帧时长估算（毫秒，约 30 FPS） */
+    private static const FRAME_MS:int = 33;
     /** @private stall 事件最小上报间隔（毫秒） */
     private static const STALL_EMIT_MS:int = 250;
 
@@ -160,10 +166,58 @@ public class WebSessionCtrl {
     private var _origShine:int;
     /** @private 是否已覆盖 <code>FPS_SHINE_EFFECT</code> */
     private var _shineOverridden:Boolean;
+    /** @private 本端算出的状态哈希环（元素 <code>{epoch, frame, hash, detail}</code>，最旧在前） */
+    private var _hashLocal:Array = [];
+    /** @private 已收到但本端尚未算到该帧的对端状态哈希环 */
+    private var _hashRemote:Array = [];
+    /** @private 已核对一致的状态哈希条数 */
+    private var _hashVerified:int;
+    /** @private 已上报过失同步的 epoch 集合（每个 epoch 只上报一次） */
+    private var _hashDesyncEpochs:Object = {};
+    /** @private 本场是否检测到过状态哈希失同步 */
+    private var _hashDesynced:Boolean;
+    /** @private 最近一次中继往返延迟（毫秒） */
+    private var _rtt:int;
     /** @private 锁帧渲染回调累计调用次数 */
     private var _renderCount:int;
     /** @private 锁帧渲染回调累计返回 <code>false</code>（本帧等待对端）次数 */
     private var _stallCount:int;
+
+    /**
+     * 中继抖动缓冲中等待模拟的帧数（无对战逻辑时为 0），供 FPS 叠层显示。
+     * @return 缓冲帧数。
+     * @default 0
+     */
+    public function get bufferedFrames():int {
+        return _relayLogic ? _relayLogic.bufferedFrames : 0;
+    }
+
+    /**
+     * 估算输入到画面的额外滞后（毫秒）：缓冲帧数 × 帧时长 + 中继往返延迟的一半。
+     * @return 估算滞后毫秒数。
+     * @default 0
+     */
+    public function get lagMs():int {
+        return bufferedFrames * FRAME_MS + (_rtt >> 1);
+    }
+
+    /**
+     * 已与对端核对一致的状态哈希条数。
+     * @return 条数。
+     * @default 0
+     */
+    public function get hashVerified():int {
+        return _hashVerified;
+    }
+
+    /**
+     * 本场是否检测到状态哈希失同步。
+     * @return 失同步为 <code>true</code>。
+     * @default false
+     */
+    public function get desynced():Boolean {
+        return _hashDesynced;
+    }
 
     /**
      * 锁帧渲染回调累计调用次数（仅对战场景内），供 FPS 叠层按窗口差分计算卡顿占比。
@@ -358,11 +412,85 @@ public class WebSessionCtrl {
 
     /** @private */
     private function onRtt(rtt:int):void {
+        _rtt = rtt;
         WebBridge.emit('ping', {rtt: rtt});
     }
 
-    /** @private 会话消息：就绪握手优先，其余交给选人 / 同步逻辑 */
+    /** @private 本端算出状态哈希：入环、发给对端，并核对已先到的对端哈希 */
+    private function onStateHash(epoch:uint, frame:uint, hash:uint, detail:String):void {
+        var entry:Object = {epoch: epoch, frame: frame, hash: hash, detail: detail};
+        pushRing(_hashLocal, entry);
+        sendSession({type: MSG_HASH, epoch: epoch, frame: frame, hash: hash, detail: detail});
+
+        var remote:Object = takeRing(_hashRemote, epoch, frame);
+        if (remote) {
+            compareHash(entry, remote);
+        }
+    }
+
+    /** @private 收到对端状态哈希：本端已算到则立即核对，否则先放入待核对环 */
+    private function onRemoteHash(data:Object):void {
+        var remote:Object = {epoch: uint(data.epoch), frame: uint(data.frame), hash: uint(data.hash), detail: String(data.detail)};
+        var local:Object  = takeRing(_hashLocal, remote.epoch, remote.frame);
+        if (local) {
+            compareHash(local, remote);
+        }
+        else {
+            pushRing(_hashRemote, remote);
+        }
+    }
+
+    /** @private 核对同一 (epoch, frame) 的两端哈希；不一致时每个 epoch 只上报一次 */
+    private function compareHash(local:Object, remote:Object):void {
+        if (local.hash == remote.hash) {
+            _hashVerified++;
+
+            return;
+        }
+
+        _hashDesynced     = true;
+        if (_hashDesyncEpochs[local.epoch]) {
+            return;
+        }
+
+        _hashDesyncEpochs[local.epoch] = true;
+
+        var msg:String = 'desync epoch=' + local.epoch + ' frame=' + local.frame + ' local[' + local.detail + '] remote[' + remote.detail + ']';
+        trace(msg);
+        WebBridge.log(msg);
+        WebBridge.emit('desync', {frame: local.frame, epoch: local.epoch, local: local.detail, remote: remote.detail});
+    }
+
+    /** @private 入环并保持最多 <code>HASH_RING</code> 条 */
+    private function pushRing(ring:Array, entry:Object):void {
+        ring.push(entry);
+        while (ring.length > HASH_RING) {
+            ring.shift();
+        }
+    }
+
+    /** @private 取出并移除环中 (epoch, frame) 对应条目，没有返回 <code>null</code> */
+    private function takeRing(ring:Array, epoch:uint, frame:uint):Object {
+        for (var i:int = ring.length - 1; i >= 0; i--) {
+            var e:Object = ring[i];
+            if (e.epoch == epoch && e.frame == frame) {
+                ring.splice(i, 1);
+
+                return e;
+            }
+        }
+
+        return null;
+    }
+
+    /** @private 会话消息：状态哈希与就绪握手优先，其余交给选人 / 同步逻辑 */
     private function onSession(data:Object):void {
+        if (data && data.type == MSG_HASH) {
+            onRemoteHash(data);
+
+            return;
+        }
+
         if (data && data.type == MSG_READY) {
             _remoteReady = true;
             tryStart();
@@ -596,7 +724,14 @@ public class WebSessionCtrl {
 
     /** @private 创建两端对称的中继节拍锁帧逻辑并绑定卡顿回调 */
     private function createRelayLogic():void {
+        _hashLocal        = [];
+        _hashRemote       = [];
+        _hashVerified     = 0;
+        _hashDesyncEpochs = {};
+        _hashDesynced     = false;
+
         _relayLogic = new LockFrameRelayLogic();
+        _relayLogic.onStateHash = onStateHash;
         _relayLogic.init(
             _link,
             _isHost ? InputManager.I.socket_input_p1 : InputManager.I.socket_input_p2,

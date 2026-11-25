@@ -30,7 +30,8 @@ import net.play5d.game.bvn.web.ctrls.WebSessionCtrl;
 /**
  * FPS 叠层：舞台右上角的半透明小框，约每 0.5 秒刷新一次实际游戏帧率
  * （锁帧渲染回调返回 <code>true</code>、逻辑真正推进的帧数每秒；无会话时等同渲染帧率）、渲染帧率（<code>ENTER_FRAME</code> 计数）、
- * 近 1 秒锁帧卡顿占比（渲染回调返回 <code>false</code> 的帧数比例）与舞台帧率。文字按游戏帧率着色（绿 ≥27、黄 15–27、红 &lt;15）。仅一个 <code>TextField</code>，无滤镜；隐藏时不监听帧事件。
+ * 近 1 秒锁帧卡顿占比（渲染回调返回 <code>false</code> 的帧数比例）与舞台帧率；第二行为抖动缓冲帧数 <code>buf</code>、
+ * 估算滞后 <code>lag</code>（缓冲帧数 × 33ms + 往返延迟 / 2）与状态哈希核对结果（<code>sync ok</code> / <code>DESYNC</code>）。文字按游戏帧率着色（绿 ≥27、黄 15–27、红 &lt;15）。仅一个 <code>TextField</code>，无滤镜；隐藏时不监听帧事件。
  *
  * @example
  * <listing version="3.0">
@@ -151,11 +152,14 @@ public class WebFpsView extends Sprite {
         var fps:Number  = _frames * 1000 / dt;
         var game:Number = rc > 0 ? (rc - sc) * 1000 / dt : fps;
 
-        _txt.textColor = game >= GAME_GOOD ? 0x00ff66 : (game >= GAME_WARN ? 0xffdd33 : 0xff4444);
+        _txt.textColor = ctrl.desynced ? 0xff4444 : (game >= GAME_GOOD ? 0x00ff66 : (game >= GAME_WARN ? 0xffdd33 : 0xff4444));
         _txt.text      = 'game ' + game.toFixed(1)
                 + ' | fps ' + fps.toFixed(1)
                 + ' | stall ' + stallPct + '%'
-                + ' | stage ' + int(_stage.frameRate);
+                + ' | stage ' + int(_stage.frameRate)
+                + '\nbuf ' + ctrl.bufferedFrames
+                + ' | lag ~' + ctrl.lagMs + 'ms'
+                + ' | ' + (ctrl.desynced ? 'DESYNC' : 'sync ok');
         reposition();
         _frames = 0;
         _t0     = now;
