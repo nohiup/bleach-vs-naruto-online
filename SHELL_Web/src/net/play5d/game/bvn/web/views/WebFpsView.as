@@ -28,8 +28,9 @@ import net.play5d.game.bvn.GameConfig;
 import net.play5d.game.bvn.web.ctrls.WebSessionCtrl;
 
 /**
- * FPS 叠层：舞台右上角的半透明小框，约每 0.5 秒刷新一次渲染帧率（<code>ENTER_FRAME</code> 计数）、
- * 舞台帧率、逻辑帧率（<code>GameConfig.FPS_GAME</code>）与近 1 秒锁帧卡顿占比（渲染回调返回 <code>false</code> 的帧数比例）。仅一个 <code>TextField</code>，无滤镜；隐藏时不监听帧事件。
+ * FPS 叠层：舞台右上角的半透明小框，约每 0.5 秒刷新一次实际游戏帧率
+ * （锁帧渲染回调返回 <code>true</code>、逻辑真正推进的帧数每秒；无会话时等同渲染帧率）、渲染帧率（<code>ENTER_FRAME</code> 计数）、
+ * 近 1 秒锁帧卡顿占比（渲染回调返回 <code>false</code> 的帧数比例）与舞台帧率。文字按游戏帧率着色（绿 ≥27、黄 15–27、红 &lt;15）。仅一个 <code>TextField</code>，无滤镜；隐藏时不监听帧事件。
  *
  * @example
  * <listing version="3.0">
@@ -41,6 +42,10 @@ import net.play5d.game.bvn.web.ctrls.WebSessionCtrl;
 public class WebFpsView extends Sprite {
     /** @private 刷新间隔（毫秒） */
     private static const UPDATE_MS:int = 500;
+    /** @private 游戏帧率达到该值显示绿色 */
+    private static const GAME_GOOD:Number = 27;
+    /** @private 游戏帧率达到该值显示黄色，否则红色 */
+    private static const GAME_WARN:Number = 15;
 
     /**
      * 构造叠层（默认隐藏）。
@@ -143,10 +148,14 @@ public class WebFpsView extends Sprite {
         _renderLast             = rc;
         _stallLast              = sc;
 
-        _txt.text = 'FPS ' + (_frames * 1000 / dt).toFixed(1)
-                + ' | stage ' + int(_stage.frameRate)
-                + ' | logic ' + GameConfig.FPS_GAME
-                + ' | stall ' + stallPct + '%';
+        var fps:Number  = _frames * 1000 / dt;
+        var game:Number = rc > 0 ? (rc - sc) * 1000 / dt : fps;
+
+        _txt.textColor = game >= GAME_GOOD ? 0x00ff66 : (game >= GAME_WARN ? 0xffdd33 : 0xff4444);
+        _txt.text      = 'game ' + game.toFixed(1)
+                + ' | fps ' + fps.toFixed(1)
+                + ' | stall ' + stallPct + '%'
+                + ' | stage ' + int(_stage.frameRate);
         reposition();
         _frames = 0;
         _t0     = now;
