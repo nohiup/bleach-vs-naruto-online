@@ -8,7 +8,7 @@ import { FrameParser, encode, T, MAX_PAYLOAD } from './frames.js';
 
 const OPEN = 1;
 const MAX_FRAMES_PER_SEC = 120;
-const MAX_CONN_PER_IP = 5;
+const HEARTBEAT_MS = 30000;
 const MAX_JOINS_PER_10S = 5;
 
 export function configFromEnv(env = process.env) {
@@ -19,6 +19,8 @@ export function configFromEnv(env = process.env) {
         tokenTtlMs: Number(env.TOKEN_TTL_MS) || 15000,
         idleTimeoutMs: Number(env.IDLE_TIMEOUT_MS) || 10000,
         trustProxy: env.TRUST_PROXY === '1',
+        // players on one NAT / one PC testing two windows share an IP: 2 sockets per player
+        maxConnPerIp: Number(env.MAX_CONN_PER_IP) || 20,
         // test only: delay every forwarded SESSION/INPUT frame by this many ms to simulate WAN latency
         simDelayMs: Math.max(0, Number(env.SIM_DELAY_MS) || 0),
         // relay-paced ticks: max frames the relay may run ahead of the slowest client's lastFrame
@@ -273,14 +275,16 @@ export function createRelay(overrides = {}) {
             return reject(socket, 403, 'Forbidden');
         }
         const ip = clientIp(req);
-        const n = ipCounts.get(ip) || 0;
-        if (n >= MAX_CONN_PER_IP) {
-            log('reject', { why: 'ip_limit', ip });
+        if ((ipCounts.get(ip) || 0) >= cfg.maxConnPerIp) {
+            log('reject', { why: 'ip_limit', ip, open: ipCounts.get(ip) });
             return reject(socket, 429, 'Too Many Requests');
         }
         wss.handleUpgrade(req, socket, head, (ws) => {
             ws.ip = ip;
-            ipCounts.set(ip, n + 1);
+            // read the count again: upgrades complete asynchronously and may interleave
+            ipCounts.set(ip, (ipCounts.get(ip) || 0) + 1);
+            ws.isAlive = true;
+            ws.on('pong', () => { ws.isAlive = true; });
             ws.on('close', () => {
                 const left = (ipCounts.get(ip) || 1) - 1;
                 if (left > 0) ipCounts.set(ip, left);
@@ -297,12 +301,23 @@ export function createRelay(overrides = {}) {
     }, tickMs);
     timer.unref();
 
+    // drop half-open sockets (browser killed behind a proxy) so they stop counting toward the IP limit
+    const heartbeat = setInterval(() => {
+        [...lobbyWss.clients, ...gameWss.clients].forEach((ws) => {
+            if (!ws.isAlive) return ws.terminate();
+            ws.isAlive = false;
+            try { ws.ping(); } catch (e) { ws.terminate(); }
+        });
+    }, HEARTBEAT_MS);
+    heartbeat.unref();
+
     function listen(port = cfg.port) {
         return new Promise((resolve) => server.listen(port, () => resolve(server.address().port)));
     }
 
     function close() {
         clearInterval(timer);
+        clearInterval(heartbeat);
         ticker.reset('shutdown');
         delayed.forEach(clearTimeout);
         delayed.clear();
