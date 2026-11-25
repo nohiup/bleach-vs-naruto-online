@@ -43,7 +43,7 @@ import net.play5d.game.bvn.ctrler.lan.LANUtils;
  * @see net.play5d.game.bvn.interfaces.lan.ILanClientLockLink
  * @see net.play5d.game.bvn.interfaces.lan.ILanSocketInput
  */
-public class LockFrameClientLogic {
+public class LockFrameClientLogic implements ILanLockFrame {
     /**
      * 构造锁帧客户端逻辑。
      */
@@ -114,6 +114,14 @@ public class LockFrameClientLogic {
         _link    = link;
         _inputP1 = inputP1;
         _inputP2 = inputP2;
+    }
+
+    /**
+     * 兼容 <code>ILanLockFrame</code>：设置 <code>enabled</code>。
+     * @param v 是否参与渲染推进。
+     */
+    public function setEnabled(v:Boolean):void {
+        enabled = v;
     }
 
     /**

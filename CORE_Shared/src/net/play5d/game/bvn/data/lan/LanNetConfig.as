@@ -62,6 +62,26 @@ public class LanNetConfig {
      */
     public static var hostPaced:Boolean = false;
 
+    /**
+     * 是否启用「中继定帧」锁帧（对称网络代码）。
+     *
+     * <p>为 <code>true</code> 时对局中由中继按固定节拍下发逐帧输入对，双方壳均创建
+     * <code>LockFrameRelayLogic</code>，各自经抖动缓冲每帧恰好推进 1 帧并采用同一对输入；
+     * 房主仅作为回合 / 结束结算的元数据权威。须双方一致并在开局前设置；
+     * 为 <code>false</code>（默认）时保持原有行为与线格式。</p>
+     *
+     * @default false
+     */
+    public static var relayPaced:Boolean = false;
+
+    /** 中继定帧抖动缓冲默认帧数 */
+    public static const RELAY_BUFFER_DEFAULT:int = 3;
+    /**
+     * 中继定帧开播前需缓冲的帧数（使用时至少取 1）。
+     * @default 3
+     */
+    public static var relayBufferFrames:int = RELAY_BUFFER_DEFAULT;
+
     /** @private */
     private static var _inputDelay:int = INPUT_DELAY_DEFAULT;
     /** @private */
