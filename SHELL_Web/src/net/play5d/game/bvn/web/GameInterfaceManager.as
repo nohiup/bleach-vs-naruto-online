@@ -26,6 +26,7 @@ import flash.utils.ByteArray;
 import net.play5d.game.bvn.GameConfig;
 import net.play5d.game.bvn.GameQuality;
 import net.play5d.game.bvn.MainGame;
+import net.play5d.game.bvn.ctrler.game_ctrls.GameCtrl;
 import net.play5d.game.bvn.data.GameData;
 import net.play5d.game.bvn.data.vos.ConfigVO;
 import net.play5d.game.bvn.input.GameInputType;
@@ -33,6 +34,7 @@ import net.play5d.game.bvn.interfaces.IExtendConfig;
 import net.play5d.game.bvn.interfaces.IFighterActionCtrl;
 import net.play5d.game.bvn.interfaces.IGameInput;
 import net.play5d.game.bvn.interfaces.IGameInterface;
+import net.play5d.game.bvn.map.MapLayerCacheUtil;
 import net.play5d.game.bvn.utils.CreditsSpriteUtil;
 import net.play5d.game.bvn.utils.URL;
 import net.play5d.game.bvn.web.ctrls.WebSessionCtrl;
@@ -317,12 +319,18 @@ public class GameInterfaceManager implements IGameInterface {
     }
 
     /**
-     * 构建对局后回调；网页壳为空实现。
+     * 构建对局后回调；网页壳仅为静态地图层启用纯 <code>cacheAsBitmap</code>。
      *
-     * <p>不调用 <code>MapLayerCacheUtil</code>：其设置的 <code>cacheAsBitmapMatrix</code> 仅 AIR 可用，
+     * <p>不调用 <code>MapLayerCacheUtil.enableBitmapCache</code>：其 <code>cacheAsBitmapMatrix</code> 仅 AIR 可用，
      * 在 Flash Player / Ruffle 中抛出 ReferenceError #1056，导致对局构建中断。</p>
      */
     public function afterBuildGame():void {
+        try {
+            MapLayerCacheUtil.enableStaticBitmapCache(GameCtrl.I.gameState.getMap());
+        }
+        catch (e:Error) {
+            trace('afterBuildGame static cache error ::', e);
+        }
     }
 
     /**
