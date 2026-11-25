@@ -55,7 +55,7 @@ public class LanClientSyncCore {
     public var onDesync:Function;
 
     /** @private */
-    private var _lockFrame:LockFrameClientLogic;
+    private var _lockFrame:ILanLockFrame;
     /** @private */
     private var _onFatalError:Function;
     /** @private */
@@ -76,12 +76,12 @@ public class LanClientSyncCore {
     /**
      * 绑定锁帧逻辑与致命错误回调。
      *
-     * @param lockFrame 锁帧客户端逻辑。
+     * @param lockFrame 锁帧客户端逻辑（<code>LockFrameClientLogic</code> 或中继定帧 <code>LockFrameRelayLogic</code>）。
      * @param onFatalError 致命同步错误时回调（通常结束对局并弹窗）。
      * @param delayText 延迟显示文本；可为 null。
      */
     public function bind(
-            lockFrame   :LockFrameClientLogic,
+            lockFrame   :ILanLockFrame,
             onFatalError:Function,
             delayText   :TextField = null
     ):void {
@@ -203,7 +203,7 @@ public class LanClientSyncCore {
         case LanSyncType.ROUND_FINISH:
             atHostFrame(arr.length > 7 ? int(arr[7]) : 0, function ():void {
                 if (_lockFrame) {
-                    _lockFrame.enabled = false;
+                    _lockFrame.setEnabled(false);
                     _lockFrame.reset();
                 }
                 KyoTimeout.setFrameTimeout(function ():void {
@@ -224,13 +224,13 @@ public class LanClientSyncCore {
      */
     public function onRoundStart():void {
         if (_lockFrame) {
-            _lockFrame.enabled = true;
+            _lockFrame.setEnabled(true);
         }
     }
 
     /** @private 房主主导时延后到本机播放至房主同一帧再执行；否则立即执行 */
     private function atHostFrame(hostFrame:int, fn:Function):void {
-        if (_lockFrame && LanNetConfig.hostPaced && hostFrame > 0) {
+        if (_lockFrame && (LanNetConfig.hostPaced || LanNetConfig.relayPaced) && hostFrame > 0) {
             _lockFrame.runAtFrame(hostFrame, fn);
 
             return;
@@ -244,7 +244,7 @@ public class LanClientSyncCore {
             GameCtrl.I.doStartGame();
             _syncErrorTimes = 0;
             if (_lockFrame) {
-                _lockFrame.enabled = true;
+                _lockFrame.setEnabled(true);
                 _lockFrame.reset();
             }
         }
@@ -336,7 +336,7 @@ public class LanClientSyncCore {
 
     private function syncGameFinish():void {
         if (_lockFrame) {
-            _lockFrame.enabled = false;
+            _lockFrame.setEnabled(false);
             _lockFrame.reset();
         }
 

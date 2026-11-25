@@ -41,7 +41,7 @@ public class LanServerSyncCore {
      */
 
     /** @private */
-    private var _lockFrame:LockFrameServerLogic;
+    private var _lockFrame:ILanLockFrame;
     /** @private */
     private var _sendTCP:Function;
     /** @private */
@@ -50,10 +50,10 @@ public class LanServerSyncCore {
     /**
      * 绑定锁帧逻辑与 TCP 发送。
      *
-     * @param lockFrame 服务端锁帧逻辑。
+     * @param lockFrame 服务端锁帧逻辑（<code>LockFrameServerLogic</code> 或中继定帧 <code>LockFrameRelayLogic</code>）。
      * @param sendTCP 向所有客户端发送载荷，签名 <code>Function(Object):void</code>。
      */
-    public function bind(lockFrame:LockFrameServerLogic, sendTCP:Function):void {
+    public function bind(lockFrame:ILanLockFrame, sendTCP:Function):void {
         unbind();
         _lockFrame = lockFrame;
         _sendTCP   = sendTCP;
@@ -84,7 +84,7 @@ public class LanServerSyncCore {
         //SYNC,type,inputDelay
         LANUtils.updateParams();
         if (_lockFrame) {
-            _lockFrame.enabled = true;
+            _lockFrame.setEnabled(true);
             _lockFrame.reset();
         }
         if (_sendTCP != null) {
@@ -95,12 +95,12 @@ public class LanServerSyncCore {
     private function onGameEnd(e:GameEvent):void {
         var endFrame:int = _lockFrame ? _lockFrame.frame : 0;
         if (_lockFrame) {
-            _lockFrame.enabled = false;
+            _lockFrame.setEnabled(false);
             _lockFrame.reset();
         }
         if (_sendTCP != null) {
             _sendTCP(
-                LanNetConfig.hostPaced
+                LanNetConfig.hostPaced || LanNetConfig.relayPaced
                     ? ['SYNC', LanSyncType.GAME_FINISH, endFrame]
                     : ['SYNC', LanSyncType.GAME_FINISH]
             );
@@ -110,7 +110,7 @@ public class LanServerSyncCore {
     private function onRoundStart(e:GameEvent):void {
         //SYNC,type,round
         if (_lockFrame) {
-            _lockFrame.enabled = true;
+            _lockFrame.setEnabled(true);
         }
     }
 
@@ -124,7 +124,7 @@ public class LanServerSyncCore {
             runData.round, runData.isTimerOver, runData.isDrawGame,
             p1.hp << 0, p2.hp << 0
         ];
-        if (LanNetConfig.hostPaced && _lockFrame) {
+        if ((LanNetConfig.hostPaced || LanNetConfig.relayPaced) && _lockFrame) {
             // 房主结算帧号：客户端播放到该帧后再结算，避免提前结束
             data.push(_lockFrame.frame);
         }
@@ -132,7 +132,7 @@ public class LanServerSyncCore {
             _sendTCP(data);
         }
         if (_lockFrame) {
-            _lockFrame.enabled = false;
+            _lockFrame.setEnabled(false);
             _lockFrame.reset();
         }
     }

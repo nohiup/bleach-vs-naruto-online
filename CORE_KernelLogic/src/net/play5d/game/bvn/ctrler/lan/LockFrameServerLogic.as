@@ -45,7 +45,7 @@ import net.play5d.kyo.stage.IStage;
  * @see net.play5d.game.bvn.interfaces.lan.ILanServerLockLink
  * @see net.play5d.game.bvn.interfaces.lan.ILanSocketInput
  */
-public class LockFrameServerLogic {
+public class LockFrameServerLogic implements ILanLockFrame {
     /**
      * 构造锁帧服务端逻辑。
      */
@@ -105,6 +105,14 @@ public class LockFrameServerLogic {
     }
 
     /**
+     * 兼容 <code>ILanLockFrame</code>：设置 <code>enabled</code>。
+     * @param v 是否参与渲染推进。
+     */
+    public function setEnabled(v:Boolean):void {
+        enabled = v;
+    }
+
+    /**
      * 重置帧与缓存。
      */
     public function reset():void {
@@ -127,6 +135,15 @@ public class LockFrameServerLogic {
      */
     public function get frame():int {
         return _renderFrame;
+    }
+
+    /**
+     * 兼容 <code>ILanLockFrame</code>；服务端即房主，无需延后，直接执行。
+     * @param hostFrame 未使用。
+     * @param fn 无参回调。
+     */
+    public function runAtFrame(hostFrame:int, fn:Function):void {
+        fn();
     }
 
     /**
